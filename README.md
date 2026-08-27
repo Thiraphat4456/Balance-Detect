@@ -129,13 +129,15 @@ positioning → calibrating → baseline → ready → reaching → completed
 4. Intro ขอส่วนสูงผู้ทดสอบเป็นเซนติเมตรก่อนเปิดกล้อง
 5. หลังจัดตำแหน่ง ระบบเก็บ shoulder-to-ankle span หลายเฟรม แล้วใช้ anthropometric prior ใน `AnthropometricHeightCalibrationService` ประมาณสเกลจากส่วนสูงที่กรอก พร้อมชดเชยอัตราส่วนกว้าง/สูงของภาพก่อนนำสเกลแนวตั้งมาใช้กับระยะเอื้อมแนวนอน
 6. `CalibrationRecord` เก็บ `anthropometricBodyHeight`, ส่วนสูงอ้างอิง, scale, timestamp และ confidence; `ExplicitDistanceCalibrationService` ยังอยู่ใน domain สำหรับ fallback/การทดลองที่ต้องการวัตถุอ้างอิง
-7. เก็บ wrist/feet baseline หลายเฟรมมากกว่า 2 วินาที ตรวจ maximum jitter ก่อนยอมรับ
-8. ช่วง reach ใช้ moving average ของ wrist และคำนวณ horizontal displacement จาก baseline ผ่าน calibration scale
-9. เก็บค่าสูงสุดตลอด assessment window ไม่ใช้ค่าของเฟรมสุดท้าย
-10. ติดตาม midpoint ของ heel + foot index ซึ่งเป็น planted-foot anchor ที่มีองค์ประกอบคงที่ ไม่นำ ankle joint ซึ่งเคลื่อนตามการเอนตัวมานับเป็นการก้าว จากนั้นทำ smoothing ใช้ noise floor ที่ปรับตามสเกลภาพ และต้องเคลื่อนเกิน tolerance ต่อเนื่องหลายเฟรมจึงเป็น invalid
-11. เก็บ metric (`distanceCm`) เป็นหลัก แล้วค่อยแปลง `inch = cm / 2.54`
-12. Classification: `< 7.0 inch = warning`, `>= 7.0 inch = normal`
-13. ระหว่าง positioning ระบบพูดคำสั่งที่เปลี่ยนตาม validation (เช่น ถอยออก, ขยับกล้องลง, หันด้านข้าง) โดย throttle ไม่ให้พูดซ้ำถี่เกินไป เมื่อพร้อมแล้วจะแจ้งเสียงและนับ 3–2–1 เพื่อเข้าสู่ขั้นตอนถัดไปเอง ไม่ต้องกดปุ่มเริ่ม
+7. ก่อนเก็บ baseline ระบบคำนวณมุม hip-shoulder-elbow และ shoulder-elbow-wrist โดยชดเชยอัตราส่วนภาพ รอให้ต้นแขนอยู่ใกล้ 90 องศาและข้อศอกเหยียด พร้อม checklist/เสียงบอกให้ยกแขน ลดแขน หรือเหยียดข้อศอก
+8. ล็อกข้างของแขนที่ใช้วัดจากเฟรมแรกที่ท่าผ่าน แล้วใช้ข้อมือข้างเดิมตลอด baseline และช่วงเอื้อม เพื่อไม่ให้ confidence ที่สลับซ้าย/ขวาทำให้ตำแหน่งกระโดด
+9. เก็บ wrist/feet baseline หลายเฟรมมากกว่า 2 วินาที ตรวจ maximum jitter ก่อนยอมรับ หากท่าแขนหลุดระหว่างเก็บ baseline จะล้างตัวอย่างเดิมและเริ่มเก็บใหม่
+10. ช่วง reach ใช้ moving average ของ wrist และคำนวณ horizontal displacement จาก baseline ผ่าน calibration scale
+11. เก็บค่าสูงสุดตลอด assessment window ไม่ใช้ค่าของเฟรมสุดท้าย
+12. ติดตาม midpoint ของ heel + foot index ซึ่งเป็น planted-foot anchor ที่มีองค์ประกอบคงที่ ไม่นำ ankle joint ซึ่งเคลื่อนตามการเอนตัวมานับเป็นการก้าว จากนั้นทำ smoothing ใช้ noise floor ที่ปรับตามสเกลภาพ และต้องเคลื่อนเกิน tolerance ต่อเนื่องหลายเฟรมจึงเป็น invalid
+13. เก็บ metric (`distanceCm`) เป็นหลัก แล้วค่อยแปลง `inch = cm / 2.54`
+14. Classification: `< 7.0 inch = warning`, `>= 7.0 inch = normal`
+15. ระหว่าง positioning ระบบพูดคำสั่งที่เปลี่ยนตาม validation (เช่น ถอยออก, ขยับกล้องลง, หันด้านข้าง) โดย throttle ไม่ให้พูดซ้ำถี่เกินไป เมื่อพร้อมแล้วจะแจ้งเสียงและนับ 3–2–1 เพื่อเข้าสู่ขั้นตอนถัดไปเอง ไม่ต้องกดปุ่มเริ่ม
 
 Explicit reference calibration ยังมี perspective/parallax error ได้ วัตถุอ้างอิงต้องอยู่ระนาบเดียวกับร่างกายและห้ามขยับกล้องหลัง calibration
 
@@ -262,6 +264,7 @@ Automated tests ครอบคลุม:
 - Explicit reference calibration แปรตาม perspective, reference placement และการขยับกล้อง ต้องพัฒนาวิธี calibration/validation ที่ควบคุมมากขึ้นสำหรับงานวิจัย
 - Anthropometric height calibration ใน MVP ใช้ shoulder-to-ankle span และ fraction ที่กำหนดใน `AssessmentConfig` เป็น prior ไม่ใช่การวัดส่วนสูงโดยตรง จึงยังมี error จากสัดส่วนบุคคล มุมกล้อง การเอนตัว และการบัง landmark; ต้อง validate เทียบกับไม้บรรทัด, RGB-D หรือ motion-capture ก่อนใช้แทน explicit reference ในงานคลินิก
 - Functional Reach foot detector ตั้งใจยืนยันเฉพาะการเคลื่อนที่ที่ชัดและต่อเนื่องเพื่อทนต่อ ML Kit landmark jitter จึงต้องเก็บข้อมูลจริงเพื่อประเมินทั้ง false-positive และ false-negative ก่อนกำหนด threshold ทางคลินิก
+- เกณฑ์ท่าเริ่มต้น 75-105 องศาที่หัวไหล่และอย่างน้อย 150 องศาที่ข้อศอกเป็น tolerance สำหรับ computer vision ไม่ใช่ clinical cutoff ต้อง validate กับวิดีโอที่มีผู้เชี่ยวชาญกำกับก่อนใช้คัดกรองจริง รายละเอียดการทบทวน prior art อยู่ใน `docs/external-implementation-review.md`
 - Fullerton step detector เป็น temporal prototype และ MVP นี้ประเมิน reach task เดียว ไม่ใช่ Fullerton Advanced Balance Scale ฉบับเต็ม
 - TUG motion detector ต้องเก็บ labeled sensor data จากผู้ใช้จริงหลายรูปร่าง รูปแบบการเดิน ตำแหน่งโทรศัพท์ และรุ่นอุปกรณ์ เพื่อ tune/validate sensitivity และ specificity
 - Automated tests ยืนยัน business rules และ deterministic algorithms แต่ไม่ทดแทน camera/sensor integration test บน physical phone

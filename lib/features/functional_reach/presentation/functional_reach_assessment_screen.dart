@@ -19,6 +19,7 @@ import 'package:balance_detect/features/assessment/domain/assessment_session.dar
 import 'package:balance_detect/features/assessment/domain/calibration_record.dart';
 import 'package:balance_detect/features/functional_reach/domain/distance_calibration_service.dart';
 import 'package:balance_detect/features/functional_reach/domain/functional_reach_logic.dart';
+import 'package:balance_detect/features/functional_reach/domain/functional_reach_posture_service.dart';
 import 'package:balance_detect/features/functional_reach/domain/functional_reach_result.dart';
 import 'package:balance_detect/features/functional_reach/domain/reach_measurement_service.dart';
 import 'package:balance_detect/features/functional_reach/presentation/reach_threshold_bar.dart';
@@ -45,6 +46,7 @@ class _FunctionalReachAssessmentScreenState
     with WidgetsBindingObserver {
   final _stateMachine = FunctionalReachStateMachine();
   final _poseValidationService = const PoseValidationService();
+  final _postureService = const FunctionalReachPostureService();
   final _anthropometricCalibrationService =
       const AnthropometricHeightCalibrationService();
   final _heightSpanSamples = <double>[];
@@ -54,6 +56,8 @@ class _FunctionalReachAssessmentScreenState
   StreamSubscription<Object>? _errorSubscription;
   StreamSubscription<PoseDebugMetrics>? _metricsSubscription;
   PoseValidation? _validation;
+  FunctionalReachPostureValidation? _postureValidation;
+  PrimaryBodySide? _measurementSide;
   PoseFrame? _lastFrame;
   PoseDebugMetrics? _debugMetrics;
   CalibrationRecord? _calibration;
@@ -126,6 +130,9 @@ class _FunctionalReachAssessmentScreenState
       requireSideView: true,
     );
     _validation = validation;
+    final postureSide = _measurementSide ?? validation.primarySide;
+    final posture = _postureService.validate(frame, postureSide);
+    _postureValidation = posture;
     if (validation.canStart && !_poseAcquiredLogged) {
       _poseAcquiredLogged = true;
       AppLogger.event('pose_acquired', <String, Object?>{
@@ -142,10 +149,15 @@ class _FunctionalReachAssessmentScreenState
         _cancelPositioningCountdown();
       }
     } else if (activeState == FunctionalReachState.ready) {
-      if (validation.canStart) {
+      if (validation.canStart && posture.canMeasure) {
         _scheduleReachStart();
       } else {
         _cancelReadyCountdown();
+        unawaited(
+          _voiceGuidance.announce(
+            validation.canStart ? posture.guidance : validation.guidance,
+          ),
+        );
       }
     } else if (activeState == FunctionalReachState.calibrating) {
       _processHeightCalibration(frame, validation);
@@ -164,29 +176,40 @@ class _FunctionalReachAssessmentScreenState
     }
 
     if (activeState == FunctionalReachState.baseline && validation.canStart) {
-      _baselineStartedAt ??= frame.timestamp;
-      _measurement?.addBaselineFrame(frame, validation.primarySide);
-      final elapsed = frame.timestamp - _baselineStartedAt!;
-      _baselineProgress =
-          elapsed.inMilliseconds /
-          AssessmentConfig.reachBaselineDuration.inMilliseconds;
-      if (elapsed >= AssessmentConfig.reachBaselineDuration) {
-        if (_measurement?.finalizeStableBaseline() ?? false) {
-          _stateMachine.transitionTo(FunctionalReachState.ready);
-          _scheduleReachStart();
-          AppLogger.event('reach_baseline_ready');
-        } else {
-          _measurement = ReachMeasurementService(calibration: _calibration!);
-          _baselineStartedAt = frame.timestamp;
-          _baselineProgress = 0;
+      if (!posture.canMeasure) {
+        _resetBaselineCapture();
+        unawaited(_voiceGuidance.announce(posture.guidance));
+      } else {
+        if (_measurementSide == null) {
+          _measurementSide = postureSide;
+          AppLogger.event('reach_measurement_side_locked', <String, Object?>{
+            'side': postureSide.name,
+          });
+        }
+        _baselineStartedAt ??= frame.timestamp;
+        _measurement?.addBaselineFrame(frame, _measurementSide!);
+        final elapsed = frame.timestamp - _baselineStartedAt!;
+        _baselineProgress =
+            elapsed.inMilliseconds /
+            AssessmentConfig.reachBaselineDuration.inMilliseconds;
+        if (elapsed >= AssessmentConfig.reachBaselineDuration) {
+          if (_measurement?.finalizeStableBaseline() ?? false) {
+            _stateMachine.transitionTo(FunctionalReachState.ready);
+            _scheduleReachStart();
+            AppLogger.event('reach_baseline_ready', <String, Object?>{
+              'shoulder_angle': posture.shoulderAngleDegrees,
+              'elbow_angle': posture.elbowAngleDegrees,
+            });
+          } else {
+            _measurement = ReachMeasurementService(calibration: _calibration!);
+            _baselineStartedAt = frame.timestamp;
+            _baselineProgress = 0;
+          }
         }
       }
     } else if (activeState == FunctionalReachState.reaching &&
         validation.canStart) {
-      final snapshot = _measurement!.addReachFrame(
-        frame,
-        validation.primarySide,
-      );
+      final snapshot = _measurement!.addReachFrame(frame, _measurementSide!);
       if (snapshot.footMovementDetected) {
         AppLogger.event('foot_movement_detected', <String, Object?>{
           'left_cm': snapshot.leftFootMovementCm,
@@ -293,6 +316,15 @@ class _FunctionalReachAssessmentScreenState
     return span > AssessmentConfig.calibrationMinNormalizedSpan ? span : null;
   }
 
+  void _resetBaselineCapture() {
+    if (_calibration == null) return;
+    if (_baselineStartedAt != null || _baselineProgress > 0) {
+      _measurement = ReachMeasurementService(calibration: _calibration!);
+    }
+    _baselineStartedAt = null;
+    _baselineProgress = 0;
+  }
+
   void _schedulePositioningStart() {
     if (_stateMachine.state != FunctionalReachState.positioning ||
         _positioningCountdownTimer != null ||
@@ -335,7 +367,8 @@ class _FunctionalReachAssessmentScreenState
     if (_stateMachine.state != FunctionalReachState.ready ||
         _readyCountdownTimer != null ||
         _lastFrame == null ||
-        !(_validation?.canStart ?? false)) {
+        !(_validation?.canStart ?? false) ||
+        !(_postureValidation?.canMeasure ?? false)) {
       return;
     }
     _readyCountdown = 3;
@@ -346,7 +379,8 @@ class _FunctionalReachAssessmentScreenState
     _readyCountdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted ||
           _stateMachine.state != FunctionalReachState.ready ||
-          !(_validation?.canStart ?? false)) {
+          !(_validation?.canStart ?? false) ||
+          !(_postureValidation?.canMeasure ?? false)) {
         timer.cancel();
         _readyCountdownTimer = null;
         _readyCountdown = null;
@@ -397,7 +431,9 @@ class _FunctionalReachAssessmentScreenState
 
   void _startReach() {
     if (_stateMachine.state != FunctionalReachState.ready ||
-        _lastFrame == null) {
+        _lastFrame == null ||
+        !(_validation?.canStart ?? false) ||
+        !(_postureValidation?.canMeasure ?? false)) {
       return;
     }
     _stateMachine.transitionTo(FunctionalReachState.reaching);
@@ -511,11 +547,14 @@ class _FunctionalReachAssessmentScreenState
     setState(() => _voiceEnabled = enabled);
     unawaited(_voiceGuidance.setEnabled(enabled));
     if (enabled) {
+      final state = _stateMachine.state;
+      final message =
+          state == FunctionalReachState.baseline ||
+              state == FunctionalReachState.ready
+          ? _postureValidation?.guidance
+          : _validation?.guidance;
       unawaited(
-        _voiceGuidance.announce(
-          _validation?.guidance ?? 'เปิดเสียงคำแนะนำแล้ว',
-          force: true,
-        ),
+        _voiceGuidance.announce(message ?? 'เปิดเสียงคำแนะนำแล้ว', force: true),
       );
     }
   }
@@ -761,35 +800,58 @@ class _FunctionalReachAssessmentScreenState
     ],
   );
 
-  Widget _buildBaseline() => Column(
-    children: [
-      Text(
-        'ยืนตรง ยกแขนขนานพื้น และอยู่นิ่ง',
-        style: Theme.of(context).textTheme.titleLarge,
-        textAlign: TextAlign.center,
-      ),
-      const SizedBox(height: 14),
-      LinearProgressIndicator(value: _baselineProgress.clamp(0.0, 1.0)),
-      const SizedBox(height: 10),
-      const Text('อยู่นิ่งจนแถบเต็ม ระบบจะไปขั้นถัดไปอัตโนมัติ'),
-    ],
-  );
+  Widget _buildBaseline() {
+    final posture = _postureValidation;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          posture?.guidance ?? 'ยกแขนขนานพื้น เหยียดข้อศอก และอยู่นิ่ง',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        const SizedBox(height: 10),
+        ChecklistTile(
+          label: 'ต้นแขนขนานพื้นประมาณ 90°',
+          passed: posture?.shoulderReady ?? false,
+          pending: posture == null,
+        ),
+        ChecklistTile(
+          label: 'เหยียดข้อศอกให้ตรง',
+          passed: posture?.elbowExtended ?? false,
+          pending: posture == null,
+        ),
+        const SizedBox(height: 14),
+        LinearProgressIndicator(value: _baselineProgress.clamp(0.0, 1.0)),
+        const SizedBox(height: 10),
+        const Text('ท่าถูกและอยู่นิ่งจนแถบเต็ม ระบบจะไปขั้นถัดไปเอง'),
+      ],
+    );
+  }
 
-  Widget _buildReady() => Column(
-    children: [
-      const StatusBanner(
-        status: AssessmentStatus.normal,
-        label: 'พร้อมเริ่ม',
-        detail: 'เอื้อมไปข้างหน้าให้ไกลที่สุด ห้ามขยับเท้า',
-      ),
-      const SizedBox(height: 18),
-      AutoStartCountdownBanner(
-        seconds: _readyCountdown,
-        readyMessage: 'เตรียมตัวได้เลย',
-        countdownMessage: 'ระบบจะเริ่มวัดเอง ไม่ต้องกดปุ่ม',
-      ),
-    ],
-  );
+  Widget _buildReady() {
+    final postureReady = _postureValidation?.canMeasure ?? false;
+    return Column(
+      children: [
+        StatusBanner(
+          status: postureReady
+              ? AssessmentStatus.normal
+              : AssessmentStatus.warning,
+          label: postureReady ? 'พร้อมเริ่ม' : 'จัดท่าแขนอีกครั้ง',
+          detail: postureReady
+              ? 'เอื้อมไปข้างหน้าให้ไกลที่สุด ห้ามขยับเท้า'
+              : _postureValidation?.guidance ?? 'กำลังตรวจท่าแขน',
+        ),
+        const SizedBox(height: 18),
+        AutoStartCountdownBanner(
+          seconds: _readyCountdown,
+          readyMessage: postureReady
+              ? 'เตรียมตัวได้เลย'
+              : 'ยกแขนขนานพื้นและเหยียดข้อศอก',
+          countdownMessage: 'ระบบจะเริ่มวัดเอง ไม่ต้องกดปุ่ม',
+        ),
+      ],
+    );
+  }
 
   Widget _buildReaching() => Column(
     children: [
