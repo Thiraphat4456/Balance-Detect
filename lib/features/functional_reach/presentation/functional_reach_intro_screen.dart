@@ -36,7 +36,10 @@ class _FunctionalReachIntroScreenState
       return;
     }
     FocusScope.of(context).unfocus();
-    context.push('/functional-reach/test', extra: heightCm);
+    context.push(
+      '/functional-reach/test?height=${heightCm.toStringAsFixed(1)}',
+      extra: heightCm,
+    );
   }
 
   @override

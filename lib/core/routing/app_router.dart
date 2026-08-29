@@ -54,11 +54,16 @@ final appRouter = GoRouter(
         GoRoute(
           path: 'test',
           builder: (context, state) {
-            final height = state.extra;
-            if (height is! num) {
+            final extraHeight = state.extra;
+            final height = extraHeight is num
+                ? extraHeight.toDouble()
+                : double.tryParse(
+                    state.uri.queryParameters['height']?.trim() ?? '',
+                  );
+            if (height == null) {
               return const _MissingHeightScreen();
             }
-            return FunctionalReachAssessmentScreen(heightCm: height.toDouble());
+            return FunctionalReachAssessmentScreen(heightCm: height);
           },
         ),
       ],

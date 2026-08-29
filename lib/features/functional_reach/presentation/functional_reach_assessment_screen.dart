@@ -92,6 +92,13 @@ class _FunctionalReachAssessmentScreenState
     _cameraService = MlKitCameraPoseService();
     _stateMachine.transitionTo(FunctionalReachState.positioning);
     unawaited(_voiceGuidance.initialize());
+    unawaited(
+      _voiceGuidance.announce(
+        'ตั้งโทรศัพท์ให้เห็นร่างกายตั้งแต่ศีรษะถึงเท้าทั้งสองข้าง '
+        'แล้วหันลำตัวด้านข้างเข้าหากล้อง',
+        force: true,
+      ),
+    );
     _frameSubscription = _cameraService.frames.listen(_onFrame);
     _errorSubscription = _cameraService.errors.listen(_onProcessingError);
     _metricsSubscription = _cameraService.debugMetrics.listen((metrics) {
@@ -142,11 +149,12 @@ class _FunctionalReachAssessmentScreenState
 
     final activeState = _stateMachine.state;
     if (activeState == FunctionalReachState.positioning) {
-      unawaited(_voiceGuidance.announce(validation.guidance));
       if (validation.canStart) {
+        unawaited(_voiceGuidance.announce(validation.guidance));
         _schedulePositioningStart();
       } else {
         _cancelPositioningCountdown();
+        unawaited(_voiceGuidance.announce(validation.guidance));
       }
     } else if (activeState == FunctionalReachState.ready) {
       if (validation.canStart && posture.canMeasure) {
@@ -175,8 +183,11 @@ class _FunctionalReachAssessmentScreenState
       }
     }
 
-    if (activeState == FunctionalReachState.baseline && validation.canStart) {
-      if (!posture.canMeasure) {
+    if (activeState == FunctionalReachState.baseline) {
+      if (!validation.canStart) {
+        _resetBaselineCapture();
+        unawaited(_voiceGuidance.announce(validation.guidance));
+      } else if (!posture.canMeasure) {
         _resetBaselineCapture();
         unawaited(_voiceGuidance.announce(posture.guidance));
       } else {
@@ -261,6 +272,7 @@ class _FunctionalReachAssessmentScreenState
       _heightCalibrationStartedAt = null;
       _heightCalibrationProgress = 0;
       _heightCalibrationMessage = 'กรุณาจัดให้เห็นหัวไหล่และเท้าครบ';
+      unawaited(_voiceGuidance.announce(_heightCalibrationMessage));
       return;
     }
     _heightCalibrationStartedAt ??= frame.timestamp;
@@ -291,7 +303,8 @@ class _FunctionalReachAssessmentScreenState
       _heightCalibrationMessage = '';
       unawaited(
         _voiceGuidance.announce(
-          'คำนวณสเกลแล้ว เริ่มเก็บตำแหน่งเริ่มต้น',
+          'คำนวณสเกลแล้ว ยกแขนข้างที่เห็นให้ขนานพื้น '
+          'เหยียดข้อศอก และอยู่นิ่ง',
           force: true,
         ),
       );
@@ -332,9 +345,7 @@ class _FunctionalReachAssessmentScreenState
       return;
     }
     _positioningCountdown = 3;
-    unawaited(
-      _voiceGuidance.announce('ตำแหน่งพร้อมแล้ว เริ่มในสามวินาที', force: true),
-    );
+    unawaited(_voiceGuidance.announce('ตำแหน่งพร้อม สาม', force: true));
     if (mounted) setState(() {});
     _positioningCountdownTimer = Timer.periodic(const Duration(seconds: 1), (
       timer,
@@ -372,9 +383,7 @@ class _FunctionalReachAssessmentScreenState
       return;
     }
     _readyCountdown = 3;
-    unawaited(
-      _voiceGuidance.announce('พร้อมแล้ว เริ่มเอื้อมในสามวินาที', force: true),
-    );
+    unawaited(_voiceGuidance.announce('พร้อมเอื้อม สาม', force: true));
     if (mounted) setState(() {});
     _readyCountdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted ||
