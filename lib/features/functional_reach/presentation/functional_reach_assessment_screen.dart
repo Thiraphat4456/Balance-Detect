@@ -203,14 +203,34 @@ class _FunctionalReachAssessmentScreenState
             elapsed.inMilliseconds /
             AssessmentConfig.reachBaselineDuration.inMilliseconds;
         if (elapsed >= AssessmentConfig.reachBaselineDuration) {
-          if (_measurement?.finalizeStableBaseline() ?? false) {
+          final measurement = _measurement;
+          if (measurement?.finalizeStableBaseline() ?? false) {
             _stateMachine.transitionTo(FunctionalReachState.ready);
             _scheduleReachStart();
             AppLogger.event('reach_baseline_ready', <String, Object?>{
               'arm_to_torso_angle': posture.armToTorsoAngleDegrees,
               'elbow_angle': posture.elbowAngleDegrees,
+              'tracked_foot_side': measurement?.trackedFootSide?.name,
+              'foot_jitter_cm': measurement?.baselineFootJitterCm,
             });
           } else {
+            final footBaselineUnstable =
+                (measurement?.baselineFootJitterNormalized ?? 0) >
+                AssessmentConfig.reachFootBaselineMaxJitterNormalized;
+            AppLogger.event('reach_baseline_rejected', <String, Object?>{
+              'tracked_foot_side': measurement?.trackedFootSide?.name,
+              'foot_jitter_normalized':
+                  measurement?.baselineFootJitterNormalized,
+              'foot_jitter_cm': measurement?.baselineFootJitterCm,
+              'foot_unstable': footBaselineUnstable,
+            });
+            unawaited(
+              _voiceGuidance.announce(
+                footBaselineUnstable
+                    ? 'จุดเท้าฝั่งกล้องยังไม่นิ่ง วางเท้าให้นิ่งและอย่าบังเท้าข้างนี้'
+                    : 'จุดร่างกายยังไม่นิ่ง กรุณาค้างท่าเดิมอีกครั้ง',
+              ),
+            );
             _measurement = ReachMeasurementService(calibration: _calibration!);
             _baselineStartedAt = frame.timestamp;
             _baselineProgress = 0;
@@ -222,9 +242,13 @@ class _FunctionalReachAssessmentScreenState
       final snapshot = _measurement!.addReachFrame(frame, _trackedArmSide!);
       if (snapshot.footMovementDetected) {
         AppLogger.event('foot_movement_detected', <String, Object?>{
+          'tracked_side': snapshot.trackedFootSide?.name,
+          'tracked_cm': snapshot.trackedFootMovementCm,
           'left_cm': snapshot.leftFootMovementCm,
           'right_cm': snapshot.rightFootMovementCm,
           'threshold_cm': snapshot.footMovementThresholdCm,
+          'confirmation_frames':
+              AssessmentConfig.footMovementConfirmationFrames,
         });
         _invalidate(InvalidReason.footMoved);
         return;
@@ -501,12 +525,20 @@ class _FunctionalReachAssessmentScreenState
       'reason': reason.name,
       'from_state': previousState.name,
     });
+    if (reason == InvalidReason.footMoved) {
+      unawaited(
+        _voiceGuidance.announce(
+          'ตรวจพบว่าเท้าฝั่งกล้องขยับต่อเนื่อง กรุณาวางเท้าให้นิ่งแล้วเริ่มใหม่',
+          force: true,
+        ),
+      );
+    }
     if (mounted) setState(() {});
   }
 
   String get _invalidMessage => switch (_invalidReason) {
     InvalidReason.footMoved =>
-      'ตรวจพบการขยับเท้า ผลระยะเอื้อมจึงไม่ถือว่าเป็นการทดสอบที่ใช้ได้',
+      'ตรวจพบการขยับของเท้าฝั่งกล้องต่อเนื่อง ผลระยะเอื้อมจึงไม่ถือว่าเป็นการทดสอบที่ใช้ได้',
     InvalidReason.poseLost =>
       'ระบบมองไม่เห็นร่างกายครบระหว่างทดสอบ กรุณาจัดตำแหน่งกล้องใหม่',
     InvalidReason.interrupted =>
@@ -759,6 +791,7 @@ class _FunctionalReachAssessmentScreenState
       status: status,
       lines: [
         'ติดตามเฉพาะแขน$sideLabelของผู้ทดสอบ',
+        'ตรวจการขยับเท้า$sideLabelฝั่งกล้อง',
         'แขน–ลำตัว ${_formatAngle(tracked.armToTorsoAngleDegrees)}',
         'ข้อศอก ${_formatAngle(tracked.elbowAngleDegrees)}',
         'ความมั่นใจแขน ${_formatConfidence(armConfidence)}  '
@@ -849,10 +882,7 @@ class _FunctionalReachAssessmentScreenState
   String _formatConfidence(double? confidence) =>
       confidence == null ? '—' : confidence.toStringAsFixed(2);
 
-  double? _trackedArmConfidence(
-    PoseFrame frame,
-    PrimaryBodySide side,
-  ) {
+  double? _trackedArmConfidence(PoseFrame frame, PrimaryBodySide side) {
     final points = <NormalizedPoint?>[
       frame[side.shoulder],
       frame[side.elbow],
@@ -869,6 +899,7 @@ class _FunctionalReachAssessmentScreenState
 
   Widget _buildDebugOverlay() {
     final metrics = _debugMetrics;
+    final reachSnapshot = _measurement?.snapshot;
     final trackedSide = _trackedSide;
     final wrist = trackedSide == null || _lastFrame == null
         ? null
@@ -883,7 +914,10 @@ class _FunctionalReachAssessmentScreenState
           'FPS ${metrics?.framesPerSecond.toStringAsFixed(1) ?? '-'}\n'
           'pose ${metrics?.poseConfidence.toStringAsFixed(2) ?? '-'}\n'
           'wrist ${wrist == null ? '-' : '${wrist.x.toStringAsFixed(3)}, ${wrist.y.toStringAsFixed(3)}'}\n'
-          'reach ${_measurement?.maximumDistanceCm.toStringAsFixed(1) ?? '-'} cm',
+          'reach ${_measurement?.maximumDistanceCm.toStringAsFixed(1) ?? '-'} cm\n'
+          'foot ${reachSnapshot?.trackedFootSide?.name ?? '-'} '
+          '${reachSnapshot?.trackedFootMovementCm.toStringAsFixed(1) ?? '-'} / '
+          '${reachSnapshot?.footMovementThresholdCm.toStringAsFixed(1) ?? '-'} cm',
           style: const TextStyle(color: Colors.white, fontSize: 12),
         ),
       ),

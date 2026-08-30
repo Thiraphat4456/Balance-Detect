@@ -13,6 +13,7 @@ class ReachMeasurementSnapshot {
     this.leftFootMovementCm = 0,
     this.rightFootMovementCm = 0,
     this.footMovementThresholdCm = 0,
+    this.trackedFootSide,
   });
 
   final double maximumDistanceCm;
@@ -21,6 +22,13 @@ class ReachMeasurementSnapshot {
   final double leftFootMovementCm;
   final double rightFootMovementCm;
   final double footMovementThresholdCm;
+  final PrimaryBodySide? trackedFootSide;
+
+  double get trackedFootMovementCm => switch (trackedFootSide) {
+    PrimaryBodySide.left => leftFootMovementCm,
+    PrimaryBodySide.right => rightFootMovementCm,
+    null => 0,
+  };
 }
 
 class ReachMeasurementService {
@@ -37,37 +45,59 @@ class ReachMeasurementService {
   final List<NormalizedPoint> _wristSmoothing = <NormalizedPoint>[];
   final List<NormalizedPoint> _leftFootSmoothing = <NormalizedPoint>[];
   final List<NormalizedPoint> _rightFootSmoothing = <NormalizedPoint>[];
+  final List<double> _trackedFootBaselineAspectRatios = <double>[];
   final List<double> _poseConfidences = <double>[];
 
+  PrimaryBodySide? _trackedFootSide;
   NormalizedPoint? _baselineWrist;
   NormalizedPoint? _baselineLeftFoot;
   NormalizedPoint? _baselineRightFoot;
   double _maximumDistanceCm = 0;
   bool _footMovementDetected = false;
-  int _leftFootCandidateFrames = 0;
-  int _rightFootCandidateFrames = 0;
+  int _trackedFootCandidateFrames = 0;
   double _leftFootMovementCm = 0;
   double _rightFootMovementCm = 0;
   double _footMovementThresholdCm = 0;
+  double _baselineFootJitterNormalized = 0;
+  double _baselineFootJitterCm = 0;
 
-  bool get hasBaseline => _baselineWrist != null;
+  bool get hasBaseline =>
+      _baselineWrist != null && _baselineForSide(_trackedFootSide) != null;
   double get maximumDistanceCm => _maximumDistanceCm;
   bool get footMovementDetected => _footMovementDetected;
+  PrimaryBodySide? get trackedFootSide => _trackedFootSide;
+  double get baselineFootJitterNormalized => _baselineFootJitterNormalized;
+  double get baselineFootJitterCm => _baselineFootJitterCm;
 
   void addBaselineFrame(PoseFrame frame, PrimaryBodySide primarySide) {
+    final trackedSide = _trackedFootSide;
+    if (trackedSide != null && trackedSide != primarySide) {
+      throw StateError('Reach baseline side changed during capture');
+    }
+    _trackedFootSide ??= primarySide;
+
     final wrist = frame[primarySide.wrist];
-    final leftFoot = _plantedFootAnchor(frame, PrimaryBodySide.left);
-    final rightFoot = _plantedFootAnchor(frame, PrimaryBodySide.right);
-    if (wrist == null || leftFoot == null || rightFoot == null) return;
+    final trackedFoot = _plantedFootAnchor(frame, primarySide);
+    if (wrist == null || trackedFoot == null) return;
+
+    final otherSide = primarySide == PrimaryBodySide.left
+        ? PrimaryBodySide.right
+        : PrimaryBodySide.left;
+    final otherFoot = _plantedFootAnchor(frame, otherSide);
     _wristBaseline.add(wrist);
-    _leftFootBaseline.add(leftFoot);
-    _rightFootBaseline.add(rightFoot);
+    _baselineValuesForSide(primarySide).add(trackedFoot);
+    if (otherFoot != null) {
+      _baselineValuesForSide(otherSide).add(otherFoot);
+    }
+    _trackedFootBaselineAspectRatios.add(_safeAspectRatio(frame));
   }
 
   bool finalizeStableBaseline() {
+    final trackedSide = _trackedFootSide;
+    if (trackedSide == null) return false;
+    final trackedFootBaseline = _baselineValuesForSide(trackedSide);
     if (_wristBaseline.length < AssessmentConfig.reachBaselineMinFrames ||
-        _leftFootBaseline.length < AssessmentConfig.reachBaselineMinFrames ||
-        _rightFootBaseline.length < AssessmentConfig.reachBaselineMinFrames) {
+        trackedFootBaseline.length < AssessmentConfig.reachBaselineMinFrames) {
       return false;
     }
     final wrist = NormalizedPoint.average(_wristBaseline);
@@ -75,16 +105,49 @@ class ReachMeasurementService {
         AssessmentConfig.reachBaselineMaxJitterNormalized) {
       return false;
     }
+    final trackedFoot = _medianPoint(trackedFootBaseline);
+    _baselineFootJitterNormalized = _robustDeviation(
+      trackedFootBaseline,
+      trackedFoot,
+    );
+    final baselineAspectRatio = _median(_trackedFootBaselineAspectRatios);
+    _baselineFootJitterCm = _robustDeviationCm(
+      trackedFootBaseline,
+      trackedFoot,
+      baselineAspectRatio,
+    );
+    if (_baselineFootJitterNormalized >
+        AssessmentConfig.reachFootBaselineMaxJitterNormalized) {
+      return false;
+    }
+
     _baselineWrist = wrist;
-    _baselineLeftFoot = NormalizedPoint.average(_leftFootBaseline);
-    _baselineRightFoot = NormalizedPoint.average(_rightFootBaseline);
+    if (trackedSide == PrimaryBodySide.left) {
+      _baselineLeftFoot = trackedFoot;
+    } else {
+      _baselineRightFoot = trackedFoot;
+    }
+    final otherSide = trackedSide == PrimaryBodySide.left
+        ? PrimaryBodySide.right
+        : PrimaryBodySide.left;
+    final otherFootBaseline = _baselineValuesForSide(otherSide);
+    if (otherFootBaseline.length >= AssessmentConfig.reachBaselineMinFrames) {
+      final otherFoot = _medianPoint(otherFootBaseline);
+      if (otherSide == PrimaryBodySide.left) {
+        _baselineLeftFoot = otherFoot;
+      } else {
+        _baselineRightFoot = otherFoot;
+      }
+    }
     for (
       var index = 0;
       index < AssessmentConfig.footMovementSmoothingWindow;
       index += 1
     ) {
-      _leftFootSmoothing.add(_baselineLeftFoot!);
-      _rightFootSmoothing.add(_baselineRightFoot!);
+      final leftBaseline = _baselineLeftFoot;
+      final rightBaseline = _baselineRightFoot;
+      if (leftBaseline != null) _leftFootSmoothing.add(leftBaseline);
+      if (rightBaseline != null) _rightFootSmoothing.add(rightBaseline);
     }
     return true;
   }
@@ -93,20 +156,25 @@ class ReachMeasurementService {
     PoseFrame frame,
     PrimaryBodySide primarySide,
   ) {
+    final trackedSide = _trackedFootSide;
     final baselineWrist = _baselineWrist;
-    final baselineLeftFoot = _baselineLeftFoot;
-    final baselineRightFoot = _baselineRightFoot;
+    final trackedFootBaseline = _baselineForSide(trackedSide);
     if (baselineWrist == null ||
-        baselineLeftFoot == null ||
-        baselineRightFoot == null) {
+        trackedSide == null ||
+        trackedFootBaseline == null) {
       throw StateError('Reach baseline has not been finalized');
+    }
+    if (trackedSide != primarySide) {
+      throw StateError('Reach tracking side changed after baseline');
     }
     final wrist = frame[primarySide.wrist];
     final leftFoot = _plantedFootAnchor(frame, PrimaryBodySide.left);
     final rightFoot = _plantedFootAnchor(frame, PrimaryBodySide.right);
-    if (wrist == null || leftFoot == null || rightFoot == null) {
-      _leftFootCandidateFrames = 0;
-      _rightFootCandidateFrames = 0;
+    final trackedFoot = trackedSide == PrimaryBodySide.left
+        ? leftFoot
+        : rightFoot;
+    if (wrist == null || trackedFoot == null) {
+      _trackedFootCandidateFrames = 0;
       return snapshot;
     }
 
@@ -122,51 +190,43 @@ class ReachMeasurementService {
     );
     _maximumDistanceCm = math.max(_maximumDistanceCm, distanceCm);
 
-    _addSmoothedPoint(_leftFootSmoothing, leftFoot);
-    _addSmoothedPoint(_rightFootSmoothing, rightFoot);
-    final smoothedLeftFoot = NormalizedPoint.average(_leftFootSmoothing);
-    final smoothedRightFoot = NormalizedPoint.average(_rightFootSmoothing);
-    _leftFootMovementCm = _pointDistanceCm(
-      smoothedLeftFoot,
-      baselineLeftFoot,
-      frame.imageAspectRatio,
+    _leftFootMovementCm = _updateFootMovement(
+      smoothing: _leftFootSmoothing,
+      point: leftFoot,
+      baseline: _baselineLeftFoot,
+      frame: frame,
     );
-    _rightFootMovementCm = _pointDistanceCm(
-      smoothedRightFoot,
-      baselineRightFoot,
-      frame.imageAspectRatio,
+    _rightFootMovementCm = _updateFootMovement(
+      smoothing: _rightFootSmoothing,
+      point: rightFoot,
+      baseline: _baselineRightFoot,
+      frame: frame,
     );
-    final normalizedNoiseFloorCm =
-        _calibrationService.normalizedDistanceToCentimeters(
+    final normalizedNoiseFloorCm = _calibrationService
+        .normalizedDistanceToCentimeters(
           AssessmentConfig.footMovementNoiseFloorNormalized,
           calibration,
         );
+    final baselineNoiseThresholdCm =
+        _baselineFootJitterCm *
+            AssessmentConfig.footMovementBaselineNoiseMultiplier +
+        AssessmentConfig.footMovementBaselineNoiseMarginCm;
     _footMovementThresholdCm = math.max(
       AssessmentConfig.footMovementToleranceCm,
-      normalizedNoiseFloorCm,
+      math.max(normalizedNoiseFloorCm, baselineNoiseThresholdCm),
     );
-    _leftFootCandidateFrames =
-        _leftFootMovementCm > _footMovementThresholdCm
-        ? _leftFootCandidateFrames + 1
+    final trackedFootMovementCm = trackedSide == PrimaryBodySide.left
+        ? _leftFootMovementCm
+        : _rightFootMovementCm;
+    _trackedFootCandidateFrames =
+        trackedFootMovementCm > _footMovementThresholdCm
+        ? _trackedFootCandidateFrames + 1
         : 0;
-    _rightFootCandidateFrames =
-        _rightFootMovementCm > _footMovementThresholdCm
-        ? _rightFootCandidateFrames + 1
-        : 0;
-    if (_leftFootCandidateFrames >=
-            AssessmentConfig.footMovementConfirmationFrames ||
-        _rightFootCandidateFrames >=
-            AssessmentConfig.footMovementConfirmationFrames) {
+    if (_trackedFootCandidateFrames >=
+        AssessmentConfig.footMovementConfirmationFrames) {
       _footMovementDetected = true;
     }
-    _poseConfidences.add(
-      <double>[
-            wrist.confidence,
-            leftFoot.confidence,
-            rightFoot.confidence,
-          ].reduce((a, b) => a + b) /
-          3,
-    );
+    _poseConfidences.add((wrist.confidence + trackedFoot.confidence) / 2);
     return snapshot;
   }
 
@@ -181,13 +241,26 @@ class ReachMeasurementService {
       leftFootMovementCm: _leftFootMovementCm,
       rightFootMovementCm: _rightFootMovementCm,
       footMovementThresholdCm: _footMovementThresholdCm,
+      trackedFootSide: _trackedFootSide,
     );
   }
 
-  NormalizedPoint? _plantedFootAnchor(
-    PoseFrame frame,
-    PrimaryBodySide side,
-  ) {
+  double _updateFootMovement({
+    required List<NormalizedPoint> smoothing,
+    required NormalizedPoint? point,
+    required NormalizedPoint? baseline,
+    required PoseFrame frame,
+  }) {
+    if (point == null || baseline == null) return 0;
+    _addSmoothedPoint(smoothing, point);
+    return _pointDistanceCm(
+      NormalizedPoint.average(smoothing),
+      baseline,
+      frame.imageAspectRatio,
+    );
+  }
+
+  NormalizedPoint? _plantedFootAnchor(PoseFrame frame, PrimaryBodySide side) {
     final heel = frame[side.heel];
     final toe = frame[side.footIndex];
     if (heel == null ||
@@ -204,10 +277,7 @@ class ReachMeasurementService {
     return NormalizedPoint.average(<NormalizedPoint>[heel, toe]);
   }
 
-  void _addSmoothedPoint(
-    List<NormalizedPoint> values,
-    NormalizedPoint point,
-  ) {
+  void _addSmoothedPoint(List<NormalizedPoint> values, NormalizedPoint point) {
     values.add(point);
     if (values.length > AssessmentConfig.footMovementSmoothingWindow) {
       values.removeAt(0);
@@ -230,6 +300,55 @@ class ReachMeasurementService {
         safeAspectRatio;
     return math.sqrt(horizontalCm * horizontalCm + verticalCm * verticalCm);
   }
+
+  List<NormalizedPoint> _baselineValuesForSide(PrimaryBodySide side) =>
+      side == PrimaryBodySide.left ? _leftFootBaseline : _rightFootBaseline;
+
+  NormalizedPoint? _baselineForSide(PrimaryBodySide? side) => switch (side) {
+    PrimaryBodySide.left => _baselineLeftFoot,
+    PrimaryBodySide.right => _baselineRightFoot,
+    null => null,
+  };
+
+  NormalizedPoint _medianPoint(List<NormalizedPoint> values) => NormalizedPoint(
+    x: _median(values.map((point) => point.x)),
+    y: _median(values.map((point) => point.y)),
+    confidence: _median(values.map((point) => point.confidence)),
+  );
+
+  double _median(Iterable<double> values) {
+    final sorted = values.toList()..sort();
+    if (sorted.isEmpty) return 0;
+    final middle = sorted.length ~/ 2;
+    return sorted.length.isOdd
+        ? sorted[middle]
+        : (sorted[middle - 1] + sorted[middle]) / 2;
+  }
+
+  double _robustDeviation(
+    List<NormalizedPoint> values,
+    NormalizedPoint center,
+  ) => _percentile90(values.map((point) => point.distanceTo(center)));
+
+  double _robustDeviationCm(
+    List<NormalizedPoint> values,
+    NormalizedPoint center,
+    double imageAspectRatio,
+  ) => _percentile90(
+    values.map((point) => _pointDistanceCm(point, center, imageAspectRatio)),
+  );
+
+  double _percentile90(Iterable<double> values) {
+    final sorted = values.toList()..sort();
+    if (sorted.isEmpty) return 0;
+    final index = (sorted.length * .9).ceil() - 1;
+    return sorted[index.clamp(0, sorted.length - 1)];
+  }
+
+  double _safeAspectRatio(PoseFrame frame) =>
+      frame.imageAspectRatio.isFinite && frame.imageAspectRatio > 0
+      ? frame.imageAspectRatio
+      : 1;
 
   double _maximumDeviation(
     List<NormalizedPoint> values,

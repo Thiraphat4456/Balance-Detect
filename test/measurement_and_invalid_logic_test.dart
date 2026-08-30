@@ -111,7 +111,7 @@ void main() {
     expect(service.finalizeStableBaseline(), isTrue);
 
     var snapshot = service.snapshot;
-    for (var index = 0; index < 5; index += 1) {
+    for (var index = 0; index < 8; index += 1) {
       snapshot = service.addReachFrame(
         _poseFrame(
           timestamp: Duration(milliseconds: 2000 + index * 100),
@@ -124,6 +124,47 @@ void main() {
     }
 
     expect(snapshot.maximumDistanceCm, closeTo(8, 0.001));
+    expect(snapshot.footMovementDetected, isTrue);
+  });
+
+  test('Reach flags sustained movement of the right camera-side foot', () {
+    final calibration = CalibrationRecord(
+      id: 'calibration',
+      sessionId: 'session',
+      timestamp: DateTime(2026),
+      scaleCmPerNormalizedUnit: 100,
+      method: CalibrationMethod.explicitKnownReference,
+      referenceDistanceCm: 50,
+      confidence: 1,
+    );
+    final service = ReachMeasurementService(calibration: calibration);
+    for (var index = 0; index < 12; index += 1) {
+      service.addBaselineFrame(
+        _poseFrame(
+          timestamp: Duration(milliseconds: index * 100),
+          wristX: .40,
+          leftFootX: .30,
+          rightFootX: .60,
+        ),
+        PrimaryBodySide.right,
+      );
+    }
+    expect(service.finalizeStableBaseline(), isTrue);
+
+    var snapshot = service.snapshot;
+    for (var index = 0; index < 8; index += 1) {
+      snapshot = service.addReachFrame(
+        _poseFrame(
+          timestamp: Duration(milliseconds: 2000 + index * 100),
+          wristX: .48,
+          leftFootX: .30,
+          rightFootX: .63,
+        ),
+        PrimaryBodySide.right,
+      );
+    }
+
+    expect(snapshot.trackedFootSide, PrimaryBodySide.right);
     expect(snapshot.footMovementDetected, isTrue);
   });
 
@@ -165,6 +206,33 @@ void main() {
     }
 
     expect(snapshot.footMovementDetected, isFalse);
+  });
+
+  test('Reach rejects an unstable camera-side foot baseline', () {
+    final calibration = CalibrationRecord(
+      id: 'height-calibration',
+      sessionId: 'session',
+      timestamp: DateTime(2026),
+      scaleCmPerNormalizedUnit: 136,
+      method: CalibrationMethod.anthropometricBodyHeight,
+      referenceDistanceCm: 170,
+      confidence: .9,
+    );
+    final service = ReachMeasurementService(calibration: calibration);
+    for (var index = 0; index < 12; index += 1) {
+      service.addBaselineFrame(
+        _poseFrame(
+          timestamp: Duration(milliseconds: index * 100),
+          wristX: .40,
+          leftFootX: index.isEven ? .28 : .32,
+          rightFootX: .60,
+          imageAspectRatio: 2 / 3,
+        ),
+        PrimaryBodySide.left,
+      );
+    }
+
+    expect(service.finalizeStableBaseline(), isFalse);
   });
 
   test('Reach ignores one large foot-landmark spike', () {
@@ -215,6 +283,55 @@ void main() {
 
     expect(snapshot.footMovementDetected, isFalse);
   });
+
+  test(
+    'Reach ignores occluded-side foot drift when the camera-side foot is planted',
+    () {
+      final calibration = CalibrationRecord(
+        id: 'height-calibration',
+        sessionId: 'session',
+        timestamp: DateTime(2026),
+        scaleCmPerNormalizedUnit: 136,
+        method: CalibrationMethod.anthropometricBodyHeight,
+        referenceDistanceCm: 170,
+        confidence: .9,
+      );
+      final service = ReachMeasurementService(calibration: calibration);
+      for (var index = 0; index < 12; index += 1) {
+        service.addBaselineFrame(
+          _poseFrame(
+            timestamp: Duration(milliseconds: index * 100),
+            wristX: .40,
+            leftFootX: .30,
+            rightFootX: .60,
+            imageAspectRatio: 2 / 3,
+          ),
+          PrimaryBodySide.left,
+        );
+      }
+      expect(service.finalizeStableBaseline(), isTrue);
+
+      var snapshot = service.snapshot;
+      for (var index = 0; index < 8; index += 1) {
+        snapshot = service.addReachFrame(
+          _poseFrame(
+            timestamp: Duration(milliseconds: 1500 + index * 100),
+            wristX: .48,
+            leftFootX: .30,
+            // The far foot is occluded in a side view. Pose estimators can
+            // drift this inferred landmark even when the real foot is still.
+            rightFootX: .65,
+            imageAspectRatio: 2 / 3,
+          ),
+          PrimaryBodySide.left,
+        );
+      }
+
+      expect(snapshot.leftFootMovementCm, lessThan(.1));
+      expect(snapshot.rightFootMovementCm, greaterThan(5));
+      expect(snapshot.footMovementDetected, isFalse);
+    },
+  );
 
   test('Reach does not treat ankle strategy as planted-foot movement', () {
     final calibration = CalibrationRecord(
@@ -321,6 +438,7 @@ PoseFrame _poseFrame({
     imageAspectRatio: imageAspectRatio,
     landmarks: <BodyLandmark, NormalizedPoint>{
       BodyLandmark.leftWrist: point(wristX, .35),
+      BodyLandmark.rightWrist: point(wristX, .35),
       BodyLandmark.leftAnkle: point(leftAnkleX ?? leftFootX, .85),
       BodyLandmark.leftHeel: point(leftFootX, .88),
       BodyLandmark.leftFootIndex: point(leftFootX + .01, .88),

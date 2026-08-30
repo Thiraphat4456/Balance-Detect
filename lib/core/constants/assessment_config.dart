@@ -28,6 +28,7 @@ abstract final class AssessmentConfig {
   static const reachBaselineDuration = Duration(milliseconds: 2200);
   static const reachBaselineMinFrames = 12;
   static const reachBaselineMaxJitterNormalized = 0.012;
+  static const reachFootBaselineMaxJitterNormalized = 0.018;
   // The Functional Reach protocol starts with the upper arm close to 90
   // degrees from the same-side shoulder-to-hip torso axis. This deliberately
   // avoids any absolute image-horizontal or floor reference, so camera tilt
@@ -41,8 +42,10 @@ abstract final class AssessmentConfig {
   static const reachSmoothingWindow = 5;
   static const footMovementToleranceCm = 2.0;
   static const footMovementNoiseFloorNormalized = 0.018;
-  static const footMovementSmoothingWindow = 3;
-  static const footMovementConfirmationFrames = 3;
+  static const footMovementBaselineNoiseMultiplier = 2.0;
+  static const footMovementBaselineNoiseMarginCm = 0.5;
+  static const footMovementSmoothingWindow = 5;
+  static const footMovementConfirmationFrames = 5;
 
   static const stepMinNormalizedDisplacement = 0.035;
   static const stepFootLengthMultiplier = 0.60;
