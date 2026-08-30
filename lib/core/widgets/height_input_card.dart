@@ -19,41 +19,67 @@ class HeightInputCard extends StatelessWidget {
     width: double.infinity,
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: AppColors.primaryContainer.withValues(alpha: .45),
-      borderRadius: BorderRadius.circular(18),
-      border: Border.all(color: AppColors.primary.withValues(alpha: .25)),
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: AppColors.border),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.height_outlined, color: AppColors.primary),
-            const SizedBox(width: 10),
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppColors.primaryContainer,
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: const Icon(
+                Icons.height_outlined,
+                color: AppColors.primaryDark,
+              ),
+            ),
+            const SizedBox(width: 12),
             Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'ส่วนสูงผู้ทดสอบ',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  Text(
+                    'ใช้ช่วยคำนวณระยะจากภาพ',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceMuted,
+                borderRadius: BorderRadius.circular(7),
+              ),
               child: Text(
-                'กรอกส่วนสูงก่อนเริ่ม',
+                'จำเป็น',
                 style: Theme.of(
                   context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                ).textTheme.labelMedium?.copyWith(color: AppColors.primaryDark),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 6),
-        Text(
-          'ระบบจะใช้ส่วนสูงช่วยคำนวณสเกลจากท่าทางของคุณ ไม่ต้องใช้วัตถุอ้างอิงในขั้นแรก',
-          style: Theme.of(context).textTheme.bodyMedium,
-        ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         TextField(
           controller: controller,
           onChanged: onChanged,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           textInputAction: TextInputAction.done,
           decoration: InputDecoration(
-            labelText: 'ส่วนสูงผู้ทดสอบ',
+            labelText: 'กรอกส่วนสูง',
             hintText: 'เช่น 165',
             suffixText: 'ซม.',
             prefixIcon: const Icon(Icons.person_outline),

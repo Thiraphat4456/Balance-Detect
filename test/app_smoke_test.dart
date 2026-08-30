@@ -24,16 +24,24 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('เลือกแบบประเมิน'), findsOneWidget);
+    expect(find.text('3 รายการ'), findsOneWidget);
     expect(find.text('วัดระยะเอื้อม'), findsOneWidget);
-    expect(find.text('กล้องหน้า • เห็นร่างกายเต็มตัว'), findsOneWidget);
+    expect(find.text('ทดสอบเอื้อมหยิบ'), findsOneWidget);
+    expect(find.text('ทดสอบลุก–เดิน–นั่ง'), findsOneWidget);
+    expect(find.text('ใช้กล้อง'), findsNWidgets(2));
+    expect(find.text('ใช้เซนเซอร์'), findsOneWidget);
+    expect(find.text('กล้องหน้า'), findsNWidgets(2));
 
     await tester.tap(find.text('วัดระยะเอื้อม'));
     await tester.pumpAndSettle();
 
     expect(find.text('วิธีเตรียมตัว'), findsOneWidget);
-    expect(find.text('กรอกส่วนสูงก่อนเริ่ม'), findsOneWidget);
+    expect(find.text('Functional Reach Test'), findsOneWidget);
     expect(find.text('ส่วนสูงผู้ทดสอบ'), findsOneWidget);
-    expect(find.text('เตรียมให้พร้อม'), findsOneWidget);
-    expect(find.text('กรอกส่วนสูงแล้วจัดตำแหน่งกล้อง'), findsOneWidget);
+    expect(find.text('กรอกส่วนสูง'), findsOneWidget);
+    expect(find.text('ขั้นตอนเตรียมตัว'), findsOneWidget);
+    expect(find.text('3 ขั้นตอน'), findsOneWidget);
+    expect(find.text('ความปลอดภัย'), findsOneWidget);
+    expect(find.text('จัดตำแหน่งกล้อง'), findsOneWidget);
   });
 }

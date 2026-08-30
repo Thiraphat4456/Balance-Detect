@@ -62,7 +62,7 @@ class _FunctionalReachIntroScreenState
     ],
     notice:
         'ควรมีผู้ดูแลยืนใกล้ตลอดการทดสอบ ระบบจะใช้ส่วนสูงคำนวณสเกลเบื้องต้น และจะเริ่มเมื่อเห็นท่าทางครบ',
-    buttonLabel: 'กรอกส่วนสูงแล้วจัดตำแหน่งกล้อง',
+    buttonLabel: 'จัดตำแหน่งกล้อง',
     onContinue: _continue,
   );
 }

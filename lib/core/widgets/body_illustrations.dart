@@ -7,14 +7,17 @@ class SideReachIllustration extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     label: 'ภาพคนยืนด้านข้าง ยกแขนและเอื้อมไปข้างหน้า',
-    child: Container(
-      width: 260,
-      height: 210,
-      decoration: BoxDecoration(
-        color: AppColors.primaryContainer.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(24),
+    child: SizedBox(
+      width: 220,
+      height: 170,
+      child: FittedBox(
+        fit: BoxFit.contain,
+        child: SizedBox(
+          width: 260,
+          height: 210,
+          child: CustomPaint(painter: _SideReachPainter()),
+        ),
       ),
-      child: CustomPaint(painter: _SideReachPainter()),
     ),
   );
 }
@@ -25,14 +28,17 @@ class WaistPhoneIllustration extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     label: 'ภาพโทรศัพท์ติดแน่นบริเวณเอว',
-    child: Container(
-      width: 260,
-      height: 210,
-      decoration: BoxDecoration(
-        color: AppColors.primaryContainer.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(24),
+    child: SizedBox(
+      width: 220,
+      height: 170,
+      child: FittedBox(
+        fit: BoxFit.contain,
+        child: SizedBox(
+          width: 260,
+          height: 210,
+          child: CustomPaint(painter: _WaistPhonePainter()),
+        ),
       ),
-      child: CustomPaint(painter: _WaistPhonePainter()),
     ),
   );
 }
@@ -70,24 +76,31 @@ class _SideReachPainter extends CustomPainter {
       Offset(size.width * .53, 184),
       body,
     );
+    // A small right-angle marker communicates that the raised arm is checked
+    // relative to the torso, not against the floor or screen edge.
     canvas.drawLine(
-      Offset(size.width * .18, 194),
-      Offset(size.width * .68, 194),
+      Offset(size.width * .46, 80),
+      Offset(size.width * .46, 96),
       guide,
     );
     canvas.drawLine(
-      Offset(size.width * .55, 66),
-      Offset(size.width * .83, 66),
+      Offset(size.width * .46, 96),
+      Offset(size.width * .40, 96),
       guide,
     );
     canvas.drawLine(
-      Offset(size.width * .80, 61),
-      Offset(size.width * .85, 66),
+      Offset(size.width * .57, 62),
+      Offset(size.width * .83, 62),
       guide,
     );
     canvas.drawLine(
-      Offset(size.width * .80, 71),
-      Offset(size.width * .85, 66),
+      Offset(size.width * .80, 57),
+      Offset(size.width * .85, 62),
+      guide,
+    );
+    canvas.drawLine(
+      Offset(size.width * .80, 67),
+      Offset(size.width * .85, 62),
       guide,
     );
   }

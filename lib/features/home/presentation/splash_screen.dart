@@ -40,12 +40,12 @@ class _SplashScreenState extends State<SplashScreen> {
               width: 96,
               height: 96,
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(28),
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(24),
               ),
               child: const Icon(
-                Icons.balance,
-                size: 58,
+                Icons.monitor_heart_outlined,
+                size: 54,
                 color: AppColors.primary,
               ),
             ),
@@ -54,12 +54,12 @@ class _SplashScreenState extends State<SplashScreen> {
               'Balance Detect',
               style: Theme.of(
                 context,
-              ).textTheme.headlineLarge?.copyWith(color: Colors.white),
+              ).textTheme.headlineLarge?.copyWith(color: AppColors.surface),
             ),
             const SizedBox(height: 10),
             const Text(
               'ประเมินการทรงตัวอย่างเป็นขั้นตอน',
-              style: TextStyle(color: Colors.white, fontSize: 18),
+              style: TextStyle(color: AppColors.surface, fontSize: 18),
             ),
           ],
         ),

@@ -1,3 +1,4 @@
+import 'package:balance_detect/core/theme/app_theme.dart';
 import 'package:balance_detect/features/assessment_summary/presentation/assessment_summary_screen.dart';
 import 'package:balance_detect/features/fullerton/presentation/fullerton_assessment_screen.dart';
 import 'package:balance_detect/features/fullerton/presentation/fullerton_intro_screen.dart';
@@ -117,29 +118,34 @@ class _MainNavigationScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
     body: navigationShell,
-    bottomNavigationBar: NavigationBar(
-      selectedIndex: navigationShell.currentIndex,
-      onDestinationSelected: (index) => navigationShell.goBranch(
-        index,
-        initialLocation: index == navigationShell.currentIndex,
+    bottomNavigationBar: DecoratedBox(
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AppColors.border)),
       ),
-      destinations: const <NavigationDestination>[
-        NavigationDestination(
-          icon: Icon(Icons.home_outlined),
-          selectedIcon: Icon(Icons.home),
-          label: 'หน้าแรก',
+      child: NavigationBar(
+        selectedIndex: navigationShell.currentIndex,
+        onDestinationSelected: (index) => navigationShell.goBranch(
+          index,
+          initialLocation: index == navigationShell.currentIndex,
         ),
-        NavigationDestination(
-          icon: Icon(Icons.history_outlined),
-          selectedIcon: Icon(Icons.history),
-          label: 'ประวัติ',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.person_outline),
-          selectedIcon: Icon(Icons.person),
-          label: 'โปรไฟล์',
-        ),
-      ],
+        destinations: const <NavigationDestination>[
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home_rounded),
+            label: 'หน้าแรก',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.history_outlined),
+            selectedIcon: Icon(Icons.history_rounded),
+            label: 'ประวัติ',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person_rounded),
+            label: 'โปรไฟล์',
+          ),
+        ],
+      ),
     ),
   );
 }
