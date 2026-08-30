@@ -16,7 +16,23 @@ void main() {
       PrimaryBodySide.left,
     );
 
-    expect(result.shoulderAngleDegrees, closeTo(90, .001));
+    expect(result.armToTorsoAngleDegrees, closeTo(90, .001));
+    expect(result.elbowAngleDegrees, closeTo(180, .001));
+    expect(result.canMeasure, isTrue);
+  });
+
+  test('accepts an upper arm perpendicular to a tilted torso', () {
+    final result = service.validate(
+      _frame(
+        hip: const NormalizedPoint(x: .55, y: .60, confidence: .95),
+        shoulder: const NormalizedPoint(x: .40, y: .40, confidence: .95),
+        elbow: const NormalizedPoint(x: .70, y: .30, confidence: .95),
+        wrist: const NormalizedPoint(x: .94, y: .22, confidence: .95),
+      ),
+      PrimaryBodySide.left,
+    );
+
+    expect(result.armToTorsoAngleDegrees, closeTo(90, .001));
     expect(result.elbowAngleDegrees, closeTo(180, .001));
     expect(result.canMeasure, isTrue);
   });
@@ -32,8 +48,9 @@ void main() {
       PrimaryBodySide.left,
     );
 
-    expect(result.shoulderReady, isFalse);
+    expect(result.armPerpendicularToTorso, isFalse);
     expect(result.guidance, contains('ยกแขนขึ้น'));
+    expect(result.guidance, contains('ตั้งฉากกับลำตัว'));
     expect(result.canMeasure, isFalse);
   });
 
@@ -48,7 +65,7 @@ void main() {
       PrimaryBodySide.left,
     );
 
-    expect(result.shoulderReady, isTrue);
+    expect(result.armPerpendicularToTorso, isTrue);
     expect(result.elbowExtended, isFalse);
     expect(result.guidance, contains('เหยียดข้อศอก'));
     expect(result.canMeasure, isFalse);

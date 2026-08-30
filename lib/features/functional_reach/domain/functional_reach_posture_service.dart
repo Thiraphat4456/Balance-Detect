@@ -6,32 +6,33 @@ import 'package:balance_detect/features/pose/domain/pose_frame.dart';
 class FunctionalReachPostureValidation {
   const FunctionalReachPostureValidation({
     required this.landmarksReliable,
-    required this.shoulderReady,
+    required this.armPerpendicularToTorso,
     required this.elbowExtended,
-    required this.shoulderAngleDegrees,
+    required this.armToTorsoAngleDegrees,
     required this.elbowAngleDegrees,
   });
 
   final bool landmarksReliable;
-  final bool shoulderReady;
+  final bool armPerpendicularToTorso;
   final bool elbowExtended;
-  final double? shoulderAngleDegrees;
+  final double? armToTorsoAngleDegrees;
   final double? elbowAngleDegrees;
 
-  bool get canMeasure => landmarksReliable && shoulderReady && elbowExtended;
+  bool get canMeasure =>
+      landmarksReliable && armPerpendicularToTorso && elbowExtended;
 
   String get guidance {
     if (!landmarksReliable) {
       return 'จัดให้กล้องเห็นหัวไหล่ ข้อศอก ข้อมือ และสะโพกครบ';
     }
-    final shoulderAngle = shoulderAngleDegrees!;
-    if (shoulderAngle <
-        AssessmentConfig.functionalReachShoulderAngleMinDegrees) {
-      return 'ยกแขนขึ้นอีกเล็กน้อย ให้ต้นแขนขนานกับพื้น';
+    final armToTorsoAngle = armToTorsoAngleDegrees!;
+    if (armToTorsoAngle <
+        AssessmentConfig.functionalReachArmToTorsoAngleMinDegrees) {
+      return 'ยกแขนขึ้นอีกเล็กน้อย ให้ต้นแขนตั้งฉากกับลำตัว';
     }
-    if (shoulderAngle >
-        AssessmentConfig.functionalReachShoulderAngleMaxDegrees) {
-      return 'ลดแขนลงอีกเล็กน้อย ให้ต้นแขนขนานกับพื้น';
+    if (armToTorsoAngle >
+        AssessmentConfig.functionalReachArmToTorsoAngleMaxDegrees) {
+      return 'ลดแขนลงอีกเล็กน้อย ให้ต้นแขนตั้งฉากกับลำตัว';
     }
     if (!elbowExtended) {
       return 'เหยียดข้อศอกให้ตรง แล้วอยู่นิ่ง';
@@ -60,14 +61,14 @@ class FunctionalReachPostureService {
     if (!landmarksReliable) {
       return const FunctionalReachPostureValidation(
         landmarksReliable: false,
-        shoulderReady: false,
+        armPerpendicularToTorso: false,
         elbowExtended: false,
-        shoulderAngleDegrees: null,
+        armToTorsoAngleDegrees: null,
         elbowAngleDegrees: null,
       );
     }
 
-    final shoulderAngle = _jointAngleDegrees(
+    final armToTorsoAngle = _jointAngleDegrees(
       hip!,
       shoulder!,
       elbow!,
@@ -79,19 +80,19 @@ class FunctionalReachPostureService {
       wrist!,
       frame.imageAspectRatio,
     );
-    final geometryReliable = shoulderAngle != null && elbowAngle != null;
+    final geometryReliable = armToTorsoAngle != null && elbowAngle != null;
     return FunctionalReachPostureValidation(
       landmarksReliable: geometryReliable,
-      shoulderReady:
+      armPerpendicularToTorso:
           geometryReliable &&
-          shoulderAngle >=
-              AssessmentConfig.functionalReachShoulderAngleMinDegrees &&
-          shoulderAngle <=
-              AssessmentConfig.functionalReachShoulderAngleMaxDegrees,
+          armToTorsoAngle >=
+              AssessmentConfig.functionalReachArmToTorsoAngleMinDegrees &&
+          armToTorsoAngle <=
+              AssessmentConfig.functionalReachArmToTorsoAngleMaxDegrees,
       elbowExtended:
           geometryReliable &&
           elbowAngle >= AssessmentConfig.functionalReachElbowAngleMinDegrees,
-      shoulderAngleDegrees: shoulderAngle,
+      armToTorsoAngleDegrees: armToTorsoAngle,
       elbowAngleDegrees: elbowAngle,
     );
   }

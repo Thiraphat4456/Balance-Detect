@@ -208,7 +208,7 @@ class _FunctionalReachAssessmentScreenState
             _stateMachine.transitionTo(FunctionalReachState.ready);
             _scheduleReachStart();
             AppLogger.event('reach_baseline_ready', <String, Object?>{
-              'shoulder_angle': posture.shoulderAngleDegrees,
+              'arm_to_torso_angle': posture.armToTorsoAngleDegrees,
               'elbow_angle': posture.elbowAngleDegrees,
             });
           } else {
@@ -303,7 +303,7 @@ class _FunctionalReachAssessmentScreenState
       _heightCalibrationMessage = '';
       unawaited(
         _voiceGuidance.announce(
-          'คำนวณสเกลแล้ว ยกแขนข้างที่เห็นให้ขนานพื้น '
+          'คำนวณสเกลแล้ว ยกแขนข้างที่เห็นให้ตั้งฉากกับลำตัว '
           'เหยียดข้อศอก และอยู่นิ่ง',
           force: true,
         ),
@@ -815,13 +815,14 @@ class _FunctionalReachAssessmentScreenState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          posture?.guidance ?? 'ยกแขนขนานพื้น เหยียดข้อศอก และอยู่นิ่ง',
+          posture?.guidance ??
+              'ยกแขนให้ตั้งฉากกับลำตัว เหยียดข้อศอก และอยู่นิ่ง',
           style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: 10),
         ChecklistTile(
-          label: 'ต้นแขนขนานพื้นประมาณ 90°',
-          passed: posture?.shoulderReady ?? false,
+          label: 'ต้นแขนตั้งฉากกับลำตัวประมาณ 90°',
+          passed: posture?.armPerpendicularToTorso ?? false,
           pending: posture == null,
         ),
         ChecklistTile(
@@ -855,7 +856,7 @@ class _FunctionalReachAssessmentScreenState
           seconds: _readyCountdown,
           readyMessage: postureReady
               ? 'เตรียมตัวได้เลย'
-              : 'ยกแขนขนานพื้นและเหยียดข้อศอก',
+              : 'ยกแขนตั้งฉากกับลำตัวและเหยียดข้อศอก',
           countdownMessage: 'ระบบจะเริ่มวัดเอง ไม่ต้องกดปุ่ม',
         ),
       ],

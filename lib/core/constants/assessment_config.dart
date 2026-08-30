@@ -28,12 +28,14 @@ abstract final class AssessmentConfig {
   static const reachBaselineDuration = Duration(milliseconds: 2200);
   static const reachBaselineMinFrames = 12;
   static const reachBaselineMaxJitterNormalized = 0.012;
-  // The Functional Reach protocol starts near 90 degrees of shoulder flexion
-  // with an extended elbow. These wider implementation tolerances account for
-  // 2D pose jitter and must be validated on real participants before clinical
-  // use.
-  static const functionalReachShoulderAngleMinDegrees = 75.0;
-  static const functionalReachShoulderAngleMaxDegrees = 105.0;
+  // The Functional Reach protocol starts with the upper arm close to 90
+  // degrees from the same-side shoulder-to-hip torso axis. This deliberately
+  // avoids any absolute image-horizontal or floor reference, so camera tilt
+  // does not change the target posture. These wider implementation tolerances
+  // account for 2D pose jitter and must be validated on real participants
+  // before clinical use.
+  static const functionalReachArmToTorsoAngleMinDegrees = 75.0;
+  static const functionalReachArmToTorsoAngleMaxDegrees = 105.0;
   static const functionalReachElbowAngleMinDegrees = 150.0;
   static const reachWindow = Duration(seconds: 10);
   static const reachSmoothingWindow = 5;

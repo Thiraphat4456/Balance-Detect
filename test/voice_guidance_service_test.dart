@@ -43,13 +43,13 @@ void main() {
         initializationTimeout: const Duration(milliseconds: 100),
       );
 
-      await service.announce('ยกแขนให้ขนานกับพื้น', force: true);
+      await service.announce('ยกแขนให้ตั้งฉากกับลำตัว', force: true);
 
       expect(tts.setEngineCalls, 2);
       expect(tts.speakCalls, 2);
       expect(tts.spoken, <String>[
-        'ยกแขนให้ขนานกับพื้น',
-        'ยกแขนให้ขนานกับพื้น',
+        'ยกแขนให้ตั้งฉากกับลำตัว',
+        'ยกแขนให้ตั้งฉากกับลำตัว',
       ]);
       expect(tts.focusValues, everyElement(isTrue));
       expect(service.available, isTrue);
