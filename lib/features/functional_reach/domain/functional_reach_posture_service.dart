@@ -23,73 +23,27 @@ class FunctionalReachPostureValidation {
 
   String get guidance {
     if (!landmarksReliable) {
-      return 'จัดให้กล้องเห็นหัวไหล่ ข้อศอก ข้อมือ และสะโพกครบ';
+      return 'จัดให้กล้องเห็นหัวไหล่ ข้อศอก ข้อมือ และสะโพกฝั่งกล้องครบ';
     }
     final armToTorsoAngle = armToTorsoAngleDegrees!;
     if (armToTorsoAngle <
         AssessmentConfig.functionalReachArmToTorsoAngleMinDegrees) {
-      return 'เหยียดต้นแขนไปด้านหน้าให้ตั้งฉากกับลำตัว '
-          'ไม่ต้องยกเหนือระดับไหล่';
+      return 'ยกแขนทั้งสองข้างไปด้านหน้า ให้ต้นแขนฝั่งกล้องตั้งฉากกับลำตัว '
+          'ไม่ต้องยกสูงกว่าระดับไหล่';
     }
     if (armToTorsoAngle >
         AssessmentConfig.functionalReachArmToTorsoAngleMaxDegrees) {
-      return 'ลดต้นแขนลงเล็กน้อยให้ตั้งฉากกับลำตัว';
+      return 'ลดแขนทั้งสองข้างลงเล็กน้อย ให้แขนฝั่งกล้องตั้งฉากกับลำตัว';
     }
     if (!elbowExtended) {
-      return 'เหยียดข้อศอกให้ตรง แล้วอยู่นิ่ง';
+      return 'เหยียดข้อศอกทั้งสองข้างให้ตรง แล้วอยู่นิ่ง';
     }
-    return 'ท่าแขนพร้อมแล้ว อยู่นิ่ง ระบบกำลังเก็บตำแหน่งเริ่มต้น';
+    return 'ท่าแขนฝั่งกล้องพร้อมแล้ว อยู่นิ่ง ระบบกำลังเก็บตำแหน่งเริ่มต้น';
   }
 }
 
 class FunctionalReachPostureService {
   const FunctionalReachPostureService();
-
-  /// Selects the arm the participant is intentionally raising.
-  ///
-  /// Generic pose validation chooses a body side using confidence from the
-  /// whole limb, including the knee and foot. In a side view that can favor
-  /// the clear hanging arm over the raised arm. Functional Reach instead uses
-  /// the upper-arm-to-torso angle, with hysteresis supplied by [fallback], so
-  /// small landmark jitter cannot make the selected side flap between frames.
-  PrimaryBodySide selectRaisedArmSide(
-    PoseFrame frame, {
-    required PrimaryBodySide fallback,
-  }) {
-    final leftAngle = _armToTorsoAngle(frame, PrimaryBodySide.left);
-    final rightAngle = _armToTorsoAngle(frame, PrimaryBodySide.right);
-    if (leftAngle == null) {
-      return rightAngle == null ||
-              (rightAngle <
-                  AssessmentConfig.functionalReachArmSelectionActivationDegrees)
-          ? fallback
-          : PrimaryBodySide.right;
-    }
-    if (rightAngle == null) {
-      return leftAngle <
-              AssessmentConfig.functionalReachArmSelectionActivationDegrees
-          ? fallback
-          : PrimaryBodySide.left;
-    }
-
-    final difference = (leftAngle - rightAngle).abs();
-    if (difference <
-        AssessmentConfig.functionalReachArmSelectionSwitchMarginDegrees) {
-      return fallback;
-    }
-    final candidate = leftAngle > rightAngle
-        ? PrimaryBodySide.left
-        : PrimaryBodySide.right;
-    final candidateAngle = candidate == PrimaryBodySide.left
-        ? leftAngle
-        : rightAngle;
-    if (candidate != fallback &&
-        candidateAngle <
-            AssessmentConfig.functionalReachArmSelectionActivationDegrees) {
-      return fallback;
-    }
-    return candidate;
-  }
 
   FunctionalReachPostureValidation validate(
     PoseFrame frame,
@@ -142,21 +96,6 @@ class FunctionalReachPostureService {
       armToTorsoAngleDegrees: armToTorsoAngle,
       elbowAngleDegrees: elbowAngle,
     );
-  }
-
-  double? _armToTorsoAngle(PoseFrame frame, PrimaryBodySide side) {
-    final hip = frame[side.hip];
-    final shoulder = frame[side.shoulder];
-    final elbow = frame[side.elbow];
-    final points = <NormalizedPoint?>[hip, shoulder, elbow];
-    if (points.any(
-      (point) =>
-          point == null ||
-          point.confidence < AssessmentConfig.poseConfidenceThreshold,
-    )) {
-      return null;
-    }
-    return _jointAngleDegrees(hip!, shoulder!, elbow!, frame.imageAspectRatio);
   }
 
   double? _jointAngleDegrees(

@@ -31,13 +31,27 @@ class PoseValidation {
 class PoseValidationService {
   const PoseValidationService();
 
-  PoseValidation validate(PoseFrame frame, {required bool requireSideView}) {
-    final leftScore = _sideConfidence(frame, PrimaryBodySide.left);
-    final rightScore = _sideConfidence(frame, PrimaryBodySide.right);
-    final primarySide = leftScore >= rightScore
-        ? PrimaryBodySide.left
-        : PrimaryBodySide.right;
-    final sideScore = leftScore >= rightScore ? leftScore : rightScore;
+  PoseValidation validate(
+    PoseFrame frame, {
+    required bool requireSideView,
+    PrimaryBodySide? trackedSide,
+  }) {
+    late final PrimaryBodySide primarySide;
+    late final double sideScore;
+    if (trackedSide != null) {
+      // Once Functional Reach locks the camera-side arm, do not evaluate the
+      // occluded limb again. ML Kit still returns it, but it cannot affect
+      // visibility, confidence, posture, or measurement decisions.
+      primarySide = trackedSide;
+      sideScore = _sideConfidence(frame, trackedSide);
+    } else {
+      final leftScore = _sideConfidence(frame, PrimaryBodySide.left);
+      final rightScore = _sideConfidence(frame, PrimaryBodySide.right);
+      primarySide = leftScore >= rightScore
+          ? PrimaryBodySide.left
+          : PrimaryBodySide.right;
+      sideScore = leftScore >= rightScore ? leftScore : rightScore;
+    }
     final bodyVisible = _areVisible(frame, <BodyLandmark>[
       primarySide.shoulder,
       primarySide.hip,
@@ -81,7 +95,7 @@ class PoseValidationService {
     final guidance = !bodyVisible
         ? 'กรุณาถอยออกจากกล้อง จัดให้เห็นตั้งแต่ศีรษะถึงเท้า'
         : !armVisible
-        ? 'กรุณาขยับตัวให้เห็นหัวไหล่ ข้อศอก และข้อมือครบ'
+        ? 'กรุณาจัดให้เห็นหัวไหล่ ข้อศอก และข้อมือฝั่งที่หันเข้ากล้องครบ'
         : !feetVisible
         ? 'กรุณาขยับกล้องลงหรือถอยออก ให้เห็นเท้าทั้งสองข้าง'
         : !sideView

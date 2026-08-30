@@ -50,9 +50,9 @@ void main() {
     );
 
     expect(result.armPerpendicularToTorso, isFalse);
-    expect(result.guidance, contains('เหยียดต้นแขนไปด้านหน้า'));
+    expect(result.guidance, contains('ยกแขนทั้งสองข้างไปด้านหน้า'));
     expect(result.guidance, contains('ตั้งฉากกับลำตัว'));
-    expect(result.guidance, contains('ไม่ต้องยกเหนือระดับไหล่'));
+    expect(result.guidance, contains('ไม่ต้องยกสูงกว่าระดับไหล่'));
     expect(result.canMeasure, isFalse);
   });
 
@@ -88,83 +88,34 @@ void main() {
     expect(result.canMeasure, isFalse);
   });
 
-  test('uses the raised arm when the hanging side has higher confidence', () {
+  test('validates only the tracked arm when the hidden arm is distorted', () {
+    final frame = _frameWithDistortedHiddenArm();
+
+    final tracked = service.validate(frame, PrimaryBodySide.right);
+    final hidden = service.validate(frame, PrimaryBodySide.left);
+
+    expect(tracked.armToTorsoAngleDegrees, closeTo(90, .001));
+    expect(tracked.canMeasure, isTrue);
+    expect(hidden.armToTorsoAngleDegrees, greaterThan(105));
+    expect(hidden.canMeasure, isFalse);
+  });
+
+  test('pose validation keeps an explicitly locked camera-side arm', () {
     final frame = _bothSidesFrame();
     const poseValidationService = PoseValidationService();
-    final poseValidation = poseValidationService.validate(
+
+    final automatic = poseValidationService.validate(
       frame,
-      requireSideView: true,
+      requireSideView: false,
     );
-
-    // Whole-body confidence favors the right side because its legs and feet
-    // are clearer, even though the participant is intentionally raising the
-    // left arm for Functional Reach.
-    expect(poseValidation.primarySide, PrimaryBodySide.right);
-    final raisedArm = service.validate(frame, PrimaryBodySide.left);
-    expect(raisedArm.armToTorsoAngleDegrees, greaterThan(105));
-    expect(raisedArm.guidance, contains('ลดต้นแขนลง'));
-
-    final selectedSide = service.selectRaisedArmSide(
+    final locked = poseValidationService.validate(
       frame,
-      fallback: poseValidation.primarySide,
-    );
-    expect(selectedSide, PrimaryBodySide.left);
-    final selectedArm = service.validate(frame, selectedSide);
-    expect(selectedArm.guidance, contains('ลดต้นแขนลง'));
-  });
-
-  test('keeps the fallback side when both arm angles are nearly equal', () {
-    final frame = _frameWithSimilarArmAngles();
-
-    expect(
-      service.selectRaisedArmSide(frame, fallback: PrimaryBodySide.right),
-      PrimaryBodySide.right,
-    );
-  });
-
-  test('does not switch sides while both arms remain low', () {
-    final frame = _frameWithUnevenLowArms();
-
-    expect(
-      service.selectRaisedArmSide(frame, fallback: PrimaryBodySide.right),
-      PrimaryBodySide.right,
-    );
-  });
-
-  test('keeps the fallback when the only candidate arm is low confidence', () {
-    const frame = PoseFrame(
-      timestamp: Duration.zero,
-      imageAspectRatio: 2 / 3,
-      landmarks: <BodyLandmark, NormalizedPoint>{
-        BodyLandmark.leftHip: NormalizedPoint(x: .40, y: .65, confidence: .30),
-        BodyLandmark.leftShoulder: NormalizedPoint(
-          x: .40,
-          y: .40,
-          confidence: .30,
-        ),
-        BodyLandmark.leftElbow: NormalizedPoint(
-          x: .70,
-          y: .30,
-          confidence: .30,
-        ),
-        BodyLandmark.rightHip: NormalizedPoint(x: .42, y: .65, confidence: .95),
-        BodyLandmark.rightShoulder: NormalizedPoint(
-          x: .42,
-          y: .40,
-          confidence: .95,
-        ),
-        BodyLandmark.rightElbow: NormalizedPoint(
-          x: .44,
-          y: .62,
-          confidence: .95,
-        ),
-      },
+      requireSideView: false,
+      trackedSide: PrimaryBodySide.left,
     );
 
-    expect(
-      service.selectRaisedArmSide(frame, fallback: PrimaryBodySide.right),
-      PrimaryBodySide.right,
-    );
+    expect(automatic.primarySide, PrimaryBodySide.right);
+    expect(locked.primarySide, PrimaryBodySide.left);
   });
 }
 
@@ -219,36 +170,24 @@ PoseFrame _bothSidesFrame() => const PoseFrame(
   },
 );
 
-PoseFrame _frameWithSimilarArmAngles() => const PoseFrame(
+PoseFrame _frameWithDistortedHiddenArm() => const PoseFrame(
   timestamp: Duration.zero,
   imageAspectRatio: 2 / 3,
   landmarks: <BodyLandmark, NormalizedPoint>{
-    BodyLandmark.leftShoulder: NormalizedPoint(x: .40, y: .40, confidence: .95),
-    BodyLandmark.leftElbow: NormalizedPoint(x: .68, y: .40, confidence: .95),
-    BodyLandmark.leftHip: NormalizedPoint(x: .40, y: .65, confidence: .95),
+    // The left arm is behind the torso. ML Kit can report a high in-frame
+    // likelihood while placing its elbow and wrist above the shoulder.
+    BodyLandmark.leftHip: NormalizedPoint(x: .40, y: .70, confidence: .90),
+    BodyLandmark.leftShoulder: NormalizedPoint(x: .40, y: .40, confidence: .90),
+    BodyLandmark.leftElbow: NormalizedPoint(x: .60, y: .20, confidence: .90),
+    BodyLandmark.leftWrist: NormalizedPoint(x: .75, y: .05, confidence: .90),
+    // The right arm is the camera-side arm and is correctly horizontal.
+    BodyLandmark.rightHip: NormalizedPoint(x: .42, y: .70, confidence: .95),
     BodyLandmark.rightShoulder: NormalizedPoint(
       x: .42,
       y: .40,
       confidence: .95,
     ),
-    BodyLandmark.rightElbow: NormalizedPoint(x: .70, y: .38, confidence: .95),
-    BodyLandmark.rightHip: NormalizedPoint(x: .42, y: .65, confidence: .95),
-  },
-);
-
-PoseFrame _frameWithUnevenLowArms() => const PoseFrame(
-  timestamp: Duration.zero,
-  imageAspectRatio: 2 / 3,
-  landmarks: <BodyLandmark, NormalizedPoint>{
-    BodyLandmark.leftShoulder: NormalizedPoint(x: .40, y: .40, confidence: .95),
-    BodyLandmark.leftElbow: NormalizedPoint(x: .55, y: .55, confidence: .95),
-    BodyLandmark.leftHip: NormalizedPoint(x: .40, y: .65, confidence: .95),
-    BodyLandmark.rightShoulder: NormalizedPoint(
-      x: .42,
-      y: .40,
-      confidence: .95,
-    ),
-    BodyLandmark.rightElbow: NormalizedPoint(x: .44, y: .62, confidence: .95),
-    BodyLandmark.rightHip: NormalizedPoint(x: .42, y: .65, confidence: .95),
+    BodyLandmark.rightElbow: NormalizedPoint(x: .70, y: .40, confidence: .95),
+    BodyLandmark.rightWrist: NormalizedPoint(x: .90, y: .40, confidence: .95),
   },
 );

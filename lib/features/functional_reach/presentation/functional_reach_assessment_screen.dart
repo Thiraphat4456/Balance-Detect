@@ -58,8 +58,7 @@ class _FunctionalReachAssessmentScreenState
   StreamSubscription<PoseDebugMetrics>? _metricsSubscription;
   PoseValidation? _validation;
   FunctionalReachPostureValidation? _postureValidation;
-  PrimaryBodySide? _activeArmSide;
-  PrimaryBodySide? _measurementSide;
+  PrimaryBodySide? _trackedArmSide;
   PoseFrame? _lastFrame;
   PoseDebugMetrics? _debugMetrics;
   CalibrationRecord? _calibration;
@@ -98,7 +97,9 @@ class _FunctionalReachAssessmentScreenState
     unawaited(
       _voiceGuidance.announce(
         'ตั้งโทรศัพท์ให้เห็นร่างกายตั้งแต่ศีรษะถึงเท้าทั้งสองข้าง '
-        'แล้วหันลำตัวด้านข้างเข้าหากล้อง',
+        'แล้วหันลำตัวด้านข้างเข้าหากล้อง '
+        'เมื่อถึงขั้นจัดท่าให้ยกแขนทั้งสองข้าง '
+        'ระบบจะติดตามเฉพาะแขนฝั่งที่หันเข้ากล้อง',
         force: true,
       ),
     );
@@ -138,23 +139,11 @@ class _FunctionalReachAssessmentScreenState
     final validation = _poseValidationService.validate(
       frame,
       requireSideView: true,
+      trackedSide: _trackedArmSide,
     );
     _validation = validation;
-    final postureSide =
-        _measurementSide ??
-        _postureService.selectRaisedArmSide(
-          frame,
-          fallback: _activeArmSide ?? validation.primarySide,
-        );
+    final postureSide = _trackedArmSide ?? validation.primarySide;
     final posture = _postureService.validate(frame, postureSide);
-    if (_measurementSide == null && _activeArmSide != postureSide) {
-      AppLogger.event('reach_active_arm_selected', <String, Object?>{
-        'side': postureSide.name,
-        'pose_primary_side': validation.primarySide.name,
-        'arm_to_torso_angle': posture.armToTorsoAngleDegrees,
-      });
-      _activeArmSide = postureSide;
-    }
     _postureValidation = posture;
     if (validation.canStart && !_poseAcquiredLogged) {
       _poseAcquiredLogged = true;
@@ -207,14 +196,8 @@ class _FunctionalReachAssessmentScreenState
         _resetBaselineCapture();
         unawaited(_voiceGuidance.announce(posture.guidance));
       } else {
-        if (_measurementSide == null) {
-          _measurementSide = postureSide;
-          AppLogger.event('reach_measurement_side_locked', <String, Object?>{
-            'side': postureSide.name,
-          });
-        }
         _baselineStartedAt ??= frame.timestamp;
-        _measurement?.addBaselineFrame(frame, _measurementSide!);
+        _measurement?.addBaselineFrame(frame, _trackedArmSide!);
         final elapsed = frame.timestamp - _baselineStartedAt!;
         _baselineProgress =
             elapsed.inMilliseconds /
@@ -236,7 +219,7 @@ class _FunctionalReachAssessmentScreenState
       }
     } else if (activeState == FunctionalReachState.reaching &&
         validation.canStart) {
-      final snapshot = _measurement!.addReachFrame(frame, _measurementSide!);
+      final snapshot = _measurement!.addReachFrame(frame, _trackedArmSide!);
       if (snapshot.footMovementDetected) {
         AppLogger.event('foot_movement_detected', <String, Object?>{
           'left_cm': snapshot.leftFootMovementCm,
@@ -259,6 +242,11 @@ class _FunctionalReachAssessmentScreenState
         !(_validation?.canStart ?? false)) {
       return;
     }
+    _trackedArmSide = _validation!.primarySide;
+    AppLogger.event('reach_tracking_side_locked', <String, Object?>{
+      'side': _trackedArmSide!.name,
+      'confidence': _validation!.confidence,
+    });
     _heightSpanSamples.clear();
     _heightCalibrationStartedAt = null;
     _heightCalibrationProgress = 0;
@@ -319,9 +307,9 @@ class _FunctionalReachAssessmentScreenState
       _heightCalibrationMessage = '';
       unawaited(
         _voiceGuidance.announce(
-          'คำนวณสเกลแล้ว เหยียดแขนข้างที่เห็นไปด้านหน้า '
-          'ให้ต้นแขนตั้งฉากกับลำตัว '
-          'เหยียดข้อศอก และอยู่นิ่ง',
+          'คำนวณสเกลแล้ว ยกแขนทั้งสองข้างไปด้านหน้า '
+          'ให้ต้นแขนตั้งฉากกับลำตัว เหยียดข้อศอก และอยู่นิ่ง '
+          'ระบบจะวัดเฉพาะแขนฝั่งที่หันเข้ากล้อง',
           force: true,
         ),
       );
@@ -705,7 +693,8 @@ class _FunctionalReachAssessmentScreenState
       'ขยับมือถือหรือผู้ทดสอบจนทุกรายการขึ้นว่าพร้อม',
     FunctionalReachState.calibrating =>
       'อยู่นิ่ง ระบบกำลังใช้ส่วนสูง ${widget.heightCm.toStringAsFixed(0)} ซม. คำนวณสเกล',
-    FunctionalReachState.baseline => 'เหยียดแขนไปด้านหน้าและอยู่นิ่งจนแถบเต็ม',
+    FunctionalReachState.baseline =>
+      'ยกแขนทั้งสองข้างไปด้านหน้า ระบบวัดเฉพาะแขนฝั่งกล้อง',
     FunctionalReachState.ready =>
       'เตรียมตัวให้พร้อม ระบบจะเริ่มเองหลังนับถอยหลัง',
     FunctionalReachState.reaching => 'เอื้อมไปข้างหน้าโดยไม่ขยับเท้า',
@@ -732,7 +721,7 @@ class _FunctionalReachAssessmentScreenState
                 if (_showPoseSkeleton)
                   PoseSkeletonOverlay(
                     frame: _lastFrame,
-                    highlightedSide: _trackedSide,
+                    trackedSide: _trackedSide,
                   ),
                 IgnorePointer(
                   child: CustomPaint(painter: _CameraGuidePainter()),
@@ -748,35 +737,33 @@ class _FunctionalReachAssessmentScreenState
   }
 
   PrimaryBodySide? get _trackedSide =>
-      _measurementSide ?? _activeArmSide ?? _validation?.primarySide;
+      _trackedArmSide ?? _validation?.primarySide;
 
   Widget _buildPoseDiagnostics() {
     final frame = _lastFrame;
-    if (frame == null) {
+    final trackedSide = _trackedSide;
+    if (frame == null || trackedSide == null) {
       return _buildPoseDiagnosticCard(
         statusColor: Colors.white,
         status: 'กำลังค้นหาร่างกาย',
-        lines: const ['จุดแดง = ความมั่นใจต่ำ'],
+        lines: const ['ระบบจะเลือกแขนฝั่งที่หันเข้ากล้อง'],
       );
     }
 
-    final left = _postureService.validate(frame, PrimaryBodySide.left);
-    final right = _postureService.validate(frame, PrimaryBodySide.right);
-    final trackedSide = _trackedSide ?? PrimaryBodySide.left;
-    final tracked = trackedSide == PrimaryBodySide.left ? left : right;
+    final tracked = _postureService.validate(frame, trackedSide);
+    final armConfidence = _trackedArmConfidence(frame, trackedSide);
     final sideLabel = trackedSide == PrimaryBodySide.left ? 'ซ้าย' : 'ขวา';
     final (statusColor, status) = _poseDiagnosticStatus(tracked);
     return _buildPoseDiagnosticCard(
       statusColor: statusColor,
       status: status,
       lines: [
-        'เส้นเหลือง: แขน$sideLabelของผู้ทดสอบ',
-        'แขน–ลำตัว  ซ้าย ${_formatAngle(left.armToTorsoAngleDegrees)}  '
-            'ขวา ${_formatAngle(right.armToTorsoAngleDegrees)}',
-        'ข้อศอกแขน$sideLabel ${_formatAngle(tracked.elbowAngleDegrees)}',
-        'ความมั่นใจ ${_formatConfidence(_debugMetrics?.poseConfidence)}  '
+        'ติดตามเฉพาะแขน$sideLabelของผู้ทดสอบ',
+        'แขน–ลำตัว ${_formatAngle(tracked.armToTorsoAngleDegrees)}',
+        'ข้อศอก ${_formatAngle(tracked.elbowAngleDegrees)}',
+        'ความมั่นใจแขน ${_formatConfidence(armConfidence)}  '
             '· ${_formatFps(_debugMetrics?.framesPerSecond)}',
-        'จุดแดง = ความมั่นใจต่ำ',
+        'แขนอีกข้างไม่ใช้ในการวัด',
       ],
     );
   }
@@ -841,7 +828,7 @@ class _FunctionalReachAssessmentScreenState
     FunctionalReachPostureValidation posture,
   ) {
     if (!posture.landmarksReliable) {
-      return (const Color(0xFFFF6259), 'จุดแขนยังไม่ชัด');
+      return (const Color(0xFFFF6259), 'จุดแขนฝั่งกล้องยังไม่ชัด');
     }
     final angle = posture.armToTorsoAngleDegrees!;
     if (angle < AssessmentConfig.functionalReachArmToTorsoAngleMinDegrees) {
@@ -862,14 +849,30 @@ class _FunctionalReachAssessmentScreenState
   String _formatConfidence(double? confidence) =>
       confidence == null ? '—' : confidence.toStringAsFixed(2);
 
+  double? _trackedArmConfidence(
+    PoseFrame frame,
+    PrimaryBodySide side,
+  ) {
+    final points = <NormalizedPoint?>[
+      frame[side.shoulder],
+      frame[side.elbow],
+      frame[side.wrist],
+      frame[side.hip],
+    ].whereType<NormalizedPoint>().toList(growable: false);
+    if (points.length != 4) return null;
+    return points.fold(0.0, (sum, point) => sum + point.confidence) /
+        points.length;
+  }
+
   String _formatFps(double? fps) =>
       fps == null ? '— fps' : '${fps.toStringAsFixed(0)} fps';
 
   Widget _buildDebugOverlay() {
     final metrics = _debugMetrics;
-    final wrist = _validation == null || _lastFrame == null
+    final trackedSide = _trackedSide;
+    final wrist = trackedSide == null || _lastFrame == null
         ? null
-        : _lastFrame![_validation!.primarySide.wrist];
+        : _lastFrame![trackedSide.wrist];
     return Align(
       alignment: Alignment.topLeft,
       child: Container(
@@ -912,7 +915,7 @@ class _FunctionalReachAssessmentScreenState
           pending: validation == null,
         ),
         ChecklistTile(
-          label: 'เห็นแขน',
+          label: 'เห็นแขนฝั่งที่หันเข้ากล้อง',
           passed: validation?.armVisible ?? false,
           pending: validation == null,
         ),
@@ -969,18 +972,18 @@ class _FunctionalReachAssessmentScreenState
       children: [
         Text(
           posture?.guidance ??
-              'เหยียดแขนไปด้านหน้าให้ต้นแขนตั้งฉากกับลำตัว '
-                  'เหยียดข้อศอก และอยู่นิ่ง',
+              'ยกแขนทั้งสองข้างไปด้านหน้า '
+                  'ให้แขนฝั่งกล้องตั้งฉากกับลำตัว เหยียดข้อศอก และอยู่นิ่ง',
           style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: 10),
         ChecklistTile(
-          label: 'ต้นแขนตั้งฉากกับลำตัวประมาณ 90°',
+          label: 'ต้นแขนฝั่งกล้องตั้งฉากกับลำตัวประมาณ 90°',
           passed: posture?.armPerpendicularToTorso ?? false,
           pending: posture == null,
         ),
         ChecklistTile(
-          label: 'เหยียดข้อศอกให้ตรง',
+          label: 'เหยียดข้อศอกฝั่งกล้องให้ตรง',
           passed: posture?.elbowExtended ?? false,
           pending: posture == null,
         ),
@@ -1010,7 +1013,7 @@ class _FunctionalReachAssessmentScreenState
           seconds: _readyCountdown,
           readyMessage: postureReady
               ? 'เตรียมตัวได้เลย'
-              : 'เหยียดแขนไปด้านหน้าให้ตั้งฉากกับลำตัวและเหยียดข้อศอก',
+              : 'ยกแขนทั้งสองข้างไปด้านหน้า ระบบตรวจเฉพาะแขนฝั่งกล้อง',
           countdownMessage: 'ระบบจะเริ่มวัดเอง ไม่ต้องกดปุ่ม',
         ),
       ],

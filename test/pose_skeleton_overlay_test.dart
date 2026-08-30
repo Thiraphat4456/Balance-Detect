@@ -30,7 +30,7 @@ void main() {
             height: 420,
             child: PoseSkeletonOverlay(
               frame: frame,
-              highlightedSide: PrimaryBodySide.left,
+              trackedSide: PrimaryBodySide.left,
             ),
           ),
         ),
@@ -51,13 +51,29 @@ void main() {
     const frame = PoseFrame(timestamp: Duration.zero, landmarks: {});
     const left = PoseSkeletonPainter(
       frame: frame,
-      highlightedSide: PrimaryBodySide.left,
+      trackedSide: PrimaryBodySide.left,
     );
     const right = PoseSkeletonPainter(
       frame: frame,
-      highlightedSide: PrimaryBodySide.right,
+      trackedSide: PrimaryBodySide.right,
     );
 
     expect(right.shouldRepaint(left), isTrue);
+  });
+
+  test('draws only the tracked arm while retaining the torso and legs', () {
+    const painter = PoseSkeletonPainter(
+      frame: null,
+      trackedSide: PrimaryBodySide.left,
+    );
+
+    expect(painter.drawsArm(PrimaryBodySide.left), isTrue);
+    expect(painter.drawsArm(PrimaryBodySide.right), isFalse);
+    expect(painter.drawsLandmark(BodyLandmark.leftElbow), isTrue);
+    expect(painter.drawsLandmark(BodyLandmark.leftWrist), isTrue);
+    expect(painter.drawsLandmark(BodyLandmark.rightElbow), isFalse);
+    expect(painter.drawsLandmark(BodyLandmark.rightWrist), isFalse);
+    expect(painter.drawsLandmark(BodyLandmark.rightShoulder), isTrue);
+    expect(painter.drawsLandmark(BodyLandmark.rightAnkle), isTrue);
   });
 }

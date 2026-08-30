@@ -5,31 +5,25 @@ import 'package:flutter/material.dart';
 /// Draws the pose landmarks in the same normalized coordinate space as the
 /// camera preview.
 ///
-/// Reliable joints are cyan, unreliable joints are red, and the arm currently
-/// selected for measurement is amber. The dark outline keeps the skeleton
-/// visible over both light and dark camera backgrounds.
+/// Reliable joints are cyan, unreliable joints are red, and the single arm
+/// selected for measurement is amber. The opposite arm is deliberately not
+/// drawn because its landmarks are commonly inferred incorrectly when it is
+/// occluded in a side view.
 class PoseSkeletonOverlay extends StatelessWidget {
-  const PoseSkeletonOverlay({
-    required this.frame,
-    this.highlightedSide,
-    super.key,
-  });
+  const PoseSkeletonOverlay({required this.frame, this.trackedSide, super.key});
 
   final PoseFrame? frame;
-  final PrimaryBodySide? highlightedSide;
+  final PrimaryBodySide? trackedSide;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
       label: frame == null
           ? 'กำลังค้นหาจุดข้อต่อของร่างกาย'
-          : 'แสดงโครงกระดูกและจุดข้อต่อที่ตรวจจับได้',
+          : 'แสดงโครงกระดูกโดยติดตามแขนฝั่งกล้องเพียงข้างเดียว',
       child: IgnorePointer(
         child: CustomPaint(
-          painter: PoseSkeletonPainter(
-            frame: frame,
-            highlightedSide: highlightedSide,
-          ),
+          painter: PoseSkeletonPainter(frame: frame, trackedSide: trackedSide),
         ),
       ),
     );
@@ -37,10 +31,10 @@ class PoseSkeletonOverlay extends StatelessWidget {
 }
 
 class PoseSkeletonPainter extends CustomPainter {
-  const PoseSkeletonPainter({required this.frame, this.highlightedSide});
+  const PoseSkeletonPainter({required this.frame, this.trackedSide});
 
   final PoseFrame? frame;
-  final PrimaryBodySide? highlightedSide;
+  final PrimaryBodySide? trackedSide;
 
   static const _jointColor = Color(0xFF39D4C8);
   static const _boneColor = Color(0xFFF2FFFF);
@@ -82,11 +76,13 @@ class PoseSkeletonPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     for (final bone in _bones) {
+      final armSide = _armSideForBone(bone);
+      if (armSide != null && !drawsArm(armSide)) continue;
       final start = currentFrame[bone.start];
       final end = currentFrame[bone.end];
       if (start == null || end == null) continue;
 
-      final highlighted = _isHighlightedArmBone(bone);
+      final highlighted = armSide == trackedSide;
       final reliable = _isReliable(start) && _isReliable(end);
       final width = highlighted ? 5.5 : 3.5;
       final startOffset = _toOffset(start, size);
@@ -108,8 +104,9 @@ class PoseSkeletonPainter extends CustomPainter {
       ..color = Colors.black.withValues(alpha: .8);
     final nodePaint = Paint();
     for (final entry in currentFrame.landmarks.entries) {
+      if (!drawsLandmark(entry.key)) continue;
       final point = entry.value;
-      final highlighted = _isHighlightedArmJoint(entry.key);
+      final highlighted = _isTrackedArmJoint(entry.key);
       final radius = highlighted ? 5.2 : 3.8;
       final offset = _toOffset(point, size);
       canvas.drawCircle(offset, radius + 2.2, nodeOutlinePaint);
@@ -125,15 +122,35 @@ class PoseSkeletonPainter extends CustomPainter {
   bool _isReliable(NormalizedPoint point) =>
       point.confidence >= AssessmentConfig.poseConfidenceThreshold;
 
-  bool _isHighlightedArmBone(_PoseBone bone) {
-    final side = highlightedSide;
-    if (side == null) return false;
-    return (bone.start == side.shoulder && bone.end == side.elbow) ||
-        (bone.start == side.elbow && bone.end == side.wrist);
+  /// Exposed for deterministic tests of the one-arm rendering rule.
+  bool drawsArm(PrimaryBodySide side) => trackedSide == side;
+
+  /// Keeps both shoulders for the torso outline, but hides the elbow and wrist
+  /// belonging to the occluded arm.
+  bool drawsLandmark(BodyLandmark landmark) {
+    if (landmark == BodyLandmark.leftElbow ||
+        landmark == BodyLandmark.leftWrist) {
+      return drawsArm(PrimaryBodySide.left);
+    }
+    if (landmark == BodyLandmark.rightElbow ||
+        landmark == BodyLandmark.rightWrist) {
+      return drawsArm(PrimaryBodySide.right);
+    }
+    return true;
   }
 
-  bool _isHighlightedArmJoint(BodyLandmark landmark) {
-    final side = highlightedSide;
+  PrimaryBodySide? _armSideForBone(_PoseBone bone) {
+    for (final side in PrimaryBodySide.values) {
+      if ((bone.start == side.shoulder && bone.end == side.elbow) ||
+          (bone.start == side.elbow && bone.end == side.wrist)) {
+        return side;
+      }
+    }
+    return null;
+  }
+
+  bool _isTrackedArmJoint(BodyLandmark landmark) {
+    final side = trackedSide;
     return side != null &&
         (landmark == side.shoulder ||
             landmark == side.elbow ||
@@ -147,8 +164,7 @@ class PoseSkeletonPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant PoseSkeletonPainter oldDelegate) =>
-      oldDelegate.frame != frame ||
-      oldDelegate.highlightedSide != highlightedSide;
+      oldDelegate.frame != frame || oldDelegate.trackedSide != trackedSide;
 }
 
 class _PoseBone {
