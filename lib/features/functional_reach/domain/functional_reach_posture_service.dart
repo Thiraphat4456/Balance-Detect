@@ -59,10 +59,17 @@ class FunctionalReachPostureService {
     final leftAngle = _armToTorsoAngle(frame, PrimaryBodySide.left);
     final rightAngle = _armToTorsoAngle(frame, PrimaryBodySide.right);
     if (leftAngle == null) {
-      return rightAngle == null ? fallback : PrimaryBodySide.right;
+      return rightAngle == null ||
+              (rightAngle <
+                  AssessmentConfig.functionalReachArmSelectionActivationDegrees)
+          ? fallback
+          : PrimaryBodySide.right;
     }
     if (rightAngle == null) {
-      return PrimaryBodySide.left;
+      return leftAngle <
+              AssessmentConfig.functionalReachArmSelectionActivationDegrees
+          ? fallback
+          : PrimaryBodySide.left;
     }
 
     final difference = (leftAngle - rightAngle).abs();
@@ -141,8 +148,15 @@ class FunctionalReachPostureService {
     final hip = frame[side.hip];
     final shoulder = frame[side.shoulder];
     final elbow = frame[side.elbow];
-    if (hip == null || shoulder == null || elbow == null) return null;
-    return _jointAngleDegrees(hip, shoulder, elbow, frame.imageAspectRatio);
+    final points = <NormalizedPoint?>[hip, shoulder, elbow];
+    if (points.any(
+      (point) =>
+          point == null ||
+          point.confidence < AssessmentConfig.poseConfidenceThreshold,
+    )) {
+      return null;
+    }
+    return _jointAngleDegrees(hip!, shoulder!, elbow!, frame.imageAspectRatio);
   }
 
   double? _jointAngleDegrees(

@@ -774,6 +774,8 @@ class _FunctionalReachAssessmentScreenState
         'แขน–ลำตัว  ซ้าย ${_formatAngle(left.armToTorsoAngleDegrees)}  '
             'ขวา ${_formatAngle(right.armToTorsoAngleDegrees)}',
         'ข้อศอกแขน$sideLabel ${_formatAngle(tracked.elbowAngleDegrees)}',
+        'ความมั่นใจ ${_formatConfidence(_debugMetrics?.poseConfidence)}  '
+            '· ${_formatFps(_debugMetrics?.framesPerSecond)}',
         'จุดแดง = ความมั่นใจต่ำ',
       ],
     );
@@ -856,6 +858,12 @@ class _FunctionalReachAssessmentScreenState
 
   String _formatAngle(double? angle) =>
       angle == null ? '—' : '${angle.toStringAsFixed(0)}°';
+
+  String _formatConfidence(double? confidence) =>
+      confidence == null ? '—' : confidence.toStringAsFixed(2);
+
+  String _formatFps(double? fps) =>
+      fps == null ? '— fps' : '${fps.toStringAsFixed(0)} fps';
 
   Widget _buildDebugOverlay() {
     final metrics = _debugMetrics;

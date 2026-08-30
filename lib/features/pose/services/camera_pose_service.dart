@@ -4,7 +4,9 @@ import 'dart:io';
 import 'package:balance_detect/core/constants/assessment_config.dart';
 import 'package:balance_detect/core/errors/user_facing_exception.dart';
 import 'package:balance_detect/core/logging/app_logger.dart';
+import 'package:balance_detect/features/pose/domain/pose_coordinate_mapper.dart';
 import 'package:balance_detect/features/pose/domain/pose_frame.dart';
+import 'package:balance_detect/features/pose/domain/pose_frame_smoother.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
@@ -35,7 +37,10 @@ class MlKitCameraPoseService implements CameraPoseService {
   MlKitCameraPoseService()
     : _poseDetector = PoseDetector(
         options: PoseDetectorOptions(
-          model: PoseDetectionModel.base,
+          // Full-body measurements depend on small wrist, heel, and toe
+          // landmarks. The accurate model costs more CPU than the base model,
+          // but avoids losing those points on a mid-range phone camera.
+          model: PoseDetectionModel.accurate,
           mode: PoseDetectionMode.stream,
         ),
       );
@@ -47,6 +52,8 @@ class MlKitCameraPoseService implements CameraPoseService {
       StreamController<Object>.broadcast();
   final StreamController<PoseDebugMetrics> _metricsController =
       StreamController<PoseDebugMetrics>.broadcast();
+  static const _coordinateMapper = PoseCoordinateMapper();
+  final _frameSmoother = PoseFrameSmoother();
   final Stopwatch _sessionClock = Stopwatch();
   final Stopwatch _fpsClock = Stopwatch();
   CameraController? _cameraController;
@@ -108,6 +115,7 @@ class MlKitCameraPoseService implements CameraPoseService {
     _sessionClock
       ..reset()
       ..start();
+    _frameSmoother.reset();
     _fpsClock
       ..reset()
       ..start();
@@ -131,7 +139,7 @@ class MlKitCameraPoseService implements CameraPoseService {
       final converted = _toInputImage(image);
       if (converted == null) return;
       final poses = await _poseDetector.processImage(converted.inputImage);
-      final frame = poses.isEmpty
+      final detectedFrame = poses.isEmpty
           ? PoseFrame(
               timestamp: _sessionClock.elapsed,
               landmarks: const {},
@@ -140,9 +148,9 @@ class MlKitCameraPoseService implements CameraPoseService {
             )
           : _toPoseFrame(
               poses.first,
-              converted.orientedWidth,
-              converted.orientedHeight,
+              converted,
             );
+      final frame = _frameSmoother.smooth(detectedFrame);
       if (!_disposed) _frameController.add(frame);
       _processedFrameCount += 1;
       final fpsSeconds = _fpsClock.elapsedMilliseconds / 1000;
@@ -214,6 +222,9 @@ class MlKitCameraPoseService implements CameraPoseService {
         rotation == InputImageRotation.rotation270deg;
     return _ConvertedInputImage(
       inputImage: input,
+      rotation: rotation,
+      imageWidth: image.width.toDouble(),
+      imageHeight: image.height.toDouble(),
       orientedWidth: swapsAxes
           ? image.height.toDouble()
           : image.width.toDouble(),
@@ -223,24 +234,30 @@ class MlKitCameraPoseService implements CameraPoseService {
     );
   }
 
-  PoseFrame _toPoseFrame(Pose pose, double width, double height) {
+  PoseFrame _toPoseFrame(Pose pose, _ConvertedInputImage converted) {
     final mapped = <BodyLandmark, NormalizedPoint>{};
     for (final entry in _landmarkMap.entries) {
       final landmark = pose.landmarks[entry.key];
       if (landmark == null) continue;
-      var x = (landmark.x / width).clamp(0.0, 1.0);
-      final y = (landmark.y / height).clamp(0.0, 1.0);
-      if (_camera?.lensDirection == CameraLensDirection.front) x = 1 - x;
+      final coordinates = _coordinateMapper.map(
+        x: landmark.x,
+        y: landmark.y,
+        imageWidth: converted.imageWidth,
+        imageHeight: converted.imageHeight,
+        rotation: converted.rotation,
+        lensDirection:
+            _camera?.lensDirection ?? CameraLensDirection.back,
+      );
       mapped[entry.value] = NormalizedPoint(
-        x: x,
-        y: y,
+        x: coordinates.x,
+        y: coordinates.y,
         confidence: landmark.likelihood.clamp(0.0, 1.0),
       );
     }
     return PoseFrame(
       timestamp: _sessionClock.elapsed,
       landmarks: mapped,
-      imageAspectRatio: width / height,
+      imageAspectRatio: converted.orientedWidth / converted.orientedHeight,
     );
   }
 
@@ -269,6 +286,7 @@ class MlKitCameraPoseService implements CameraPoseService {
     _disposed = true;
     _sessionClock.stop();
     _fpsClock.stop();
+    _frameSmoother.reset();
     final controller = _cameraController;
     _cameraController = null;
     if (controller?.value.isStreamingImages ?? false) {
@@ -285,11 +303,17 @@ class MlKitCameraPoseService implements CameraPoseService {
 class _ConvertedInputImage {
   const _ConvertedInputImage({
     required this.inputImage,
+    required this.rotation,
+    required this.imageWidth,
+    required this.imageHeight,
     required this.orientedWidth,
     required this.orientedHeight,
   });
 
   final InputImage inputImage;
+  final InputImageRotation rotation;
+  final double imageWidth;
+  final double imageHeight;
   final double orientedWidth;
   final double orientedHeight;
 }

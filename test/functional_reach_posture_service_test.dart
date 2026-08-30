@@ -130,6 +130,42 @@ void main() {
       PrimaryBodySide.right,
     );
   });
+
+  test('keeps the fallback when the only candidate arm is low confidence', () {
+    const frame = PoseFrame(
+      timestamp: Duration.zero,
+      imageAspectRatio: 2 / 3,
+      landmarks: <BodyLandmark, NormalizedPoint>{
+        BodyLandmark.leftHip: NormalizedPoint(x: .40, y: .65, confidence: .30),
+        BodyLandmark.leftShoulder: NormalizedPoint(
+          x: .40,
+          y: .40,
+          confidence: .30,
+        ),
+        BodyLandmark.leftElbow: NormalizedPoint(
+          x: .70,
+          y: .30,
+          confidence: .30,
+        ),
+        BodyLandmark.rightHip: NormalizedPoint(x: .42, y: .65, confidence: .95),
+        BodyLandmark.rightShoulder: NormalizedPoint(
+          x: .42,
+          y: .40,
+          confidence: .95,
+        ),
+        BodyLandmark.rightElbow: NormalizedPoint(
+          x: .44,
+          y: .62,
+          confidence: .95,
+        ),
+      },
+    );
+
+    expect(
+      service.selectRaisedArmSide(frame, fallback: PrimaryBodySide.right),
+      PrimaryBodySide.right,
+    );
+  });
 }
 
 PoseFrame _frame({
