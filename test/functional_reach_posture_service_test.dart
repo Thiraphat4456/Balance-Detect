@@ -34,6 +34,7 @@ void main() {
 
     expect(result.armToTorsoAngleDegrees, closeTo(90, .001));
     expect(result.elbowAngleDegrees, closeTo(180, .001));
+    expect(result.reachPointVisible, isTrue);
     expect(result.canMeasure, isTrue);
   });
 
@@ -50,7 +51,25 @@ void main() {
 
     expect(result.armToTorsoAngleDegrees, closeTo(90, .001));
     expect(result.elbowAngleDegrees, closeTo(180, .001));
+    expect(result.reachPointVisible, isTrue);
     expect(result.canMeasure, isTrue);
+  });
+
+  test('accepts shoulder-elbow geometry when the wrist is not in frame', () {
+    final result = service.validate(
+      _frameWithoutWrist(
+        hip: const NormalizedPoint(x: .40, y: .70, confidence: .95),
+        shoulder: const NormalizedPoint(x: .40, y: .45, confidence: .95),
+        elbow: const NormalizedPoint(x: .60, y: .45, confidence: .95),
+      ),
+      PrimaryBodySide.left,
+    );
+
+    expect(result.landmarksReliable, isTrue);
+    expect(result.armPerpendicularToTorso, isTrue);
+    expect(result.reachPointVisible, isFalse);
+    expect(result.canMeasure, isTrue);
+    expect(result.guidance, contains('ข้อมือ'));
   });
 
   test('guides a low arm forward without asking above shoulder level', () {
@@ -134,6 +153,27 @@ void main() {
     expect(automatic.primarySide, PrimaryBodySide.right);
     expect(locked.primarySide, PrimaryBodySide.left);
   });
+
+  test('pose positioning can use shoulder and elbow without a wrist', () {
+    final source = _bothSidesFrame();
+    final landmarks = Map<BodyLandmark, NormalizedPoint>.of(source.landmarks)
+      ..remove(BodyLandmark.leftWrist);
+    final frame = PoseFrame(
+      timestamp: source.timestamp,
+      imageAspectRatio: source.imageAspectRatio,
+      landmarks: landmarks,
+    );
+    const poseValidationService = PoseValidationService();
+
+    final validation = poseValidationService.validate(
+      frame,
+      requireSideView: false,
+      trackedSide: PrimaryBodySide.left,
+      requireWristForArm: false,
+    );
+
+    expect(validation.armVisible, isTrue);
+  });
 }
 
 PoseFrame _frame({
@@ -149,6 +189,20 @@ PoseFrame _frame({
     BodyLandmark.leftShoulder: shoulder,
     BodyLandmark.leftElbow: elbow,
     BodyLandmark.leftWrist: wrist,
+  },
+);
+
+PoseFrame _frameWithoutWrist({
+  required NormalizedPoint hip,
+  required NormalizedPoint shoulder,
+  required NormalizedPoint elbow,
+}) => PoseFrame(
+  timestamp: Duration.zero,
+  imageAspectRatio: 2 / 3,
+  landmarks: <BodyLandmark, NormalizedPoint>{
+    BodyLandmark.leftHip: hip,
+    BodyLandmark.leftShoulder: shoulder,
+    BodyLandmark.leftElbow: elbow,
   },
 );
 

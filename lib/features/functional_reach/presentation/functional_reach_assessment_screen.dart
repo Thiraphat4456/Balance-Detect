@@ -138,6 +138,7 @@ class _FunctionalReachAssessmentScreenState
       frame,
       requireSideView: true,
       trackedSide: _trackedArmSide,
+      requireWristForArm: false,
     );
     _validation = validation;
     final postureSide = _trackedArmSide ?? validation.primarySide;
@@ -160,7 +161,9 @@ class _FunctionalReachAssessmentScreenState
         unawaited(_voiceGuidance.announce(validation.guidance));
       }
     } else if (activeState == FunctionalReachState.ready) {
-      if (validation.canStart && posture.canMeasure) {
+      if (validation.canStart &&
+          posture.canMeasure &&
+          posture.reachPointVisible) {
         _scheduleReachStart();
       } else {
         _cancelReadyCountdown();
@@ -191,6 +194,9 @@ class _FunctionalReachAssessmentScreenState
         _resetBaselineCapture();
         unawaited(_voiceGuidance.announce(validation.guidance));
       } else if (!posture.canMeasure) {
+        _resetBaselineCapture();
+        unawaited(_voiceGuidance.announce(posture.guidance));
+      } else if (!posture.reachPointVisible) {
         _resetBaselineCapture();
         unawaited(_voiceGuidance.announce(posture.guidance));
       } else {
@@ -237,6 +243,17 @@ class _FunctionalReachAssessmentScreenState
       }
     } else if (activeState == FunctionalReachState.reaching &&
         validation.canStart) {
+      if (!posture.reachPointVisible) {
+        _poseLostFrames += 1;
+        if (_poseLostFrames >= AssessmentConfig.poseLostFrameLimit) {
+          _invalidate(InvalidReason.poseLost);
+          return;
+        }
+        unawaited(_voiceGuidance.announce(posture.guidance));
+        setState(() {});
+        return;
+      }
+      _poseLostFrames = 0;
       final snapshot = _measurement!.addReachFrame(frame, _trackedArmSide!);
       if (snapshot.footMovementDetected) {
         AppLogger.event('foot_movement_detected', <String, Object?>{
@@ -786,6 +803,7 @@ class _FunctionalReachAssessmentScreenState
       status: status,
       lines: [
         'ติดตามเฉพาะแขน$sideLabelของผู้ทดสอบ',
+        'จัดท่าตรวจไหล่–ข้อศอก$sideLabel · วัดจริงใช้ข้อมือ',
         'ตรวจการขยับเท้า$sideLabelฝั่งกล้อง',
         'แขน–ลำตัว ${_formatAngle(tracked.armToTorsoAngleDegrees)}',
         'ข้อศอก ${_formatAngle(tracked.elbowAngleDegrees)}',
@@ -868,6 +886,9 @@ class _FunctionalReachAssessmentScreenState
     if (!posture.elbowExtended) {
       return (const Color(0xFFFFC247), 'เหยียดข้อศอกให้ตรง');
     }
+    if (!posture.reachPointVisible) {
+      return (const Color(0xFFFFC247), 'ท่าแขนพร้อม รอข้อมือเพื่อวัด');
+    }
     return (const Color(0xFF55D982), 'ท่าแขนพร้อม');
   }
 
@@ -944,7 +965,7 @@ class _FunctionalReachAssessmentScreenState
           pending: validation == null,
         ),
         ChecklistTile(
-          label: 'เห็นแขนฝั่งที่หันเข้ากล้อง',
+          label: 'เห็นไหล่และข้อศอกฝั่งที่หันเข้ากล้อง',
           passed: validation?.armVisible ?? false,
           pending: validation == null,
         ),
@@ -1023,7 +1044,9 @@ class _FunctionalReachAssessmentScreenState
   }
 
   Widget _buildReady() {
-    final postureReady = _postureValidation?.canMeasure ?? false;
+    final postureReady =
+        (_postureValidation?.canMeasure ?? false) &&
+        (_postureValidation?.reachPointVisible ?? false);
     return Column(
       children: [
         StatusBanner(

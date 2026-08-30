@@ -9,6 +9,7 @@ class FunctionalReachPostureValidation {
     required this.landmarksReliable,
     required this.armPerpendicularToTorso,
     required this.elbowExtended,
+    required this.reachPointVisible,
     required this.armToTorsoAngleDegrees,
     required this.elbowAngleDegrees,
   });
@@ -16,6 +17,7 @@ class FunctionalReachPostureValidation {
   final bool landmarksReliable;
   final bool armPerpendicularToTorso;
   final bool elbowExtended;
+  final bool reachPointVisible;
   final double? armToTorsoAngleDegrees;
   final double? elbowAngleDegrees;
 
@@ -24,7 +26,7 @@ class FunctionalReachPostureValidation {
 
   String get guidance {
     if (!landmarksReliable) {
-      return 'จัดให้กล้องเห็นหัวไหล่ ข้อศอก ข้อมือ และสะโพกฝั่งกล้องครบ';
+      return FunctionalReachInstructions.setupLandmarksPrompt;
     }
     final armToTorsoAngle = armToTorsoAngleDegrees!;
     if (armToTorsoAngle <
@@ -37,6 +39,9 @@ class FunctionalReachPostureValidation {
     }
     if (!elbowExtended) {
       return FunctionalReachInstructions.extendTrackedElbow;
+    }
+    if (!reachPointVisible) {
+      return FunctionalReachInstructions.reachPointPrompt;
     }
     return FunctionalReachInstructions.trackedArmReady;
   }
@@ -53,17 +58,21 @@ class FunctionalReachPostureService {
     final shoulder = frame[side.shoulder];
     final elbow = frame[side.elbow];
     final wrist = frame[side.wrist];
-    final points = <NormalizedPoint?>[hip, shoulder, elbow, wrist];
-    final landmarksReliable = points.every(
+    final upperArmPoints = <NormalizedPoint?>[hip, shoulder, elbow];
+    final landmarksReliable = upperArmPoints.every(
       (point) =>
           point != null &&
           point.confidence >= AssessmentConfig.poseConfidenceThreshold,
     );
+    final reachPointVisible =
+        wrist != null &&
+        wrist.confidence >= AssessmentConfig.poseConfidenceThreshold;
     if (!landmarksReliable) {
       return const FunctionalReachPostureValidation(
         landmarksReliable: false,
         armPerpendicularToTorso: false,
         elbowExtended: false,
+        reachPointVisible: false,
         armToTorsoAngleDegrees: null,
         elbowAngleDegrees: null,
       );
@@ -75,13 +84,11 @@ class FunctionalReachPostureService {
       elbow!,
       frame.imageAspectRatio,
     );
-    final elbowAngle = _jointAngleDegrees(
-      shoulder,
-      elbow,
-      wrist!,
-      frame.imageAspectRatio,
-    );
-    final geometryReliable = armToTorsoAngle != null && elbowAngle != null;
+    final elbowAngle = reachPointVisible
+        ? _jointAngleDegrees(shoulder, elbow, wrist, frame.imageAspectRatio)
+        : null;
+    final geometryReliable =
+        armToTorsoAngle != null && (!reachPointVisible || elbowAngle != null);
     return FunctionalReachPostureValidation(
       landmarksReliable: geometryReliable,
       armPerpendicularToTorso:
@@ -92,7 +99,10 @@ class FunctionalReachPostureService {
               AssessmentConfig.functionalReachArmToTorsoAngleMaxDegrees,
       elbowExtended:
           geometryReliable &&
-          elbowAngle >= AssessmentConfig.functionalReachElbowAngleMinDegrees,
+          (!reachPointVisible ||
+              elbowAngle! >=
+                  AssessmentConfig.functionalReachElbowAngleMinDegrees),
+      reachPointVisible: reachPointVisible,
       armToTorsoAngleDegrees: armToTorsoAngle,
       elbowAngleDegrees: elbowAngle,
     );

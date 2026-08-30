@@ -35,6 +35,7 @@ class PoseValidationService {
     PoseFrame frame, {
     required bool requireSideView,
     PrimaryBodySide? trackedSide,
+    bool requireWristForArm = true,
   }) {
     late final PrimaryBodySide primarySide;
     late final double sideScore;
@@ -43,10 +44,22 @@ class PoseValidationService {
       // occluded limb again. ML Kit still returns it, but it cannot affect
       // visibility, confidence, posture, or measurement decisions.
       primarySide = trackedSide;
-      sideScore = _sideConfidence(frame, trackedSide);
+      sideScore = _sideConfidence(
+        frame,
+        trackedSide,
+        includeWrist: requireWristForArm,
+      );
     } else {
-      final leftScore = _sideConfidence(frame, PrimaryBodySide.left);
-      final rightScore = _sideConfidence(frame, PrimaryBodySide.right);
+      final leftScore = _sideConfidence(
+        frame,
+        PrimaryBodySide.left,
+        includeWrist: requireWristForArm,
+      );
+      final rightScore = _sideConfidence(
+        frame,
+        PrimaryBodySide.right,
+        includeWrist: requireWristForArm,
+      );
       primarySide = leftScore >= rightScore
           ? PrimaryBodySide.left
           : PrimaryBodySide.right;
@@ -61,7 +74,7 @@ class PoseValidationService {
     final armVisible = _areVisible(frame, <BodyLandmark>[
       primarySide.shoulder,
       primarySide.elbow,
-      primarySide.wrist,
+      if (requireWristForArm) primarySide.wrist,
     ]);
     final feetVisible = _areVisible(frame, <BodyLandmark>[
       BodyLandmark.leftAnkle,
@@ -95,7 +108,9 @@ class PoseValidationService {
     final guidance = !bodyVisible
         ? 'กรุณาถอยออกจากกล้อง จัดให้เห็นตั้งแต่ศีรษะถึงเท้า'
         : !armVisible
-        ? 'กรุณาจัดให้เห็นหัวไหล่ ข้อศอก และข้อมือฝั่งที่หันเข้ากล้องครบ'
+        ? requireWristForArm
+              ? 'กรุณาจัดให้เห็นหัวไหล่ ข้อศอก และข้อมือฝั่งที่หันเข้ากล้องครบ'
+              : 'กรุณาจัดให้เห็นหัวไหล่และข้อศอกฝั่งที่หันเข้ากล้องครบ'
         : !feetVisible
         ? 'กรุณาขยับกล้องลงหรือถอยออก ให้เห็นเท้าทั้งสองข้าง'
         : !sideView
@@ -115,11 +130,15 @@ class PoseValidationService {
     );
   }
 
-  double _sideConfidence(PoseFrame frame, PrimaryBodySide side) {
+  double _sideConfidence(
+    PoseFrame frame,
+    PrimaryBodySide side, {
+    required bool includeWrist,
+  }) {
     final points = <NormalizedPoint?>[
       frame[side.shoulder],
       frame[side.elbow],
-      frame[side.wrist],
+      if (includeWrist) frame[side.wrist],
       frame[side.hip],
       frame[side.knee],
       frame[side.ankle],
