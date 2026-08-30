@@ -18,6 +18,7 @@ import 'package:balance_detect/core/widgets/status_banner.dart';
 import 'package:balance_detect/features/assessment/domain/assessment_session.dart';
 import 'package:balance_detect/features/assessment/domain/calibration_record.dart';
 import 'package:balance_detect/features/functional_reach/domain/distance_calibration_service.dart';
+import 'package:balance_detect/features/functional_reach/domain/functional_reach_instructions.dart';
 import 'package:balance_detect/features/functional_reach/domain/functional_reach_logic.dart';
 import 'package:balance_detect/features/functional_reach/domain/functional_reach_posture_service.dart';
 import 'package:balance_detect/features/functional_reach/domain/functional_reach_result.dart';
@@ -96,10 +97,7 @@ class _FunctionalReachAssessmentScreenState
     unawaited(_voiceGuidance.initialize());
     unawaited(
       _voiceGuidance.announce(
-        'ตั้งโทรศัพท์ให้เห็นร่างกายตั้งแต่ศีรษะถึงเท้าทั้งสองข้าง '
-        'แล้วหันลำตัวด้านข้างเข้าหากล้อง '
-        'เมื่อถึงขั้นจัดท่าให้ยกแขนทั้งสองข้าง '
-        'ระบบจะติดตามเฉพาะแขนฝั่งที่หันเข้ากล้อง',
+        FunctionalReachInstructions.positioningVoice,
         force: true,
       ),
     );
@@ -331,9 +329,7 @@ class _FunctionalReachAssessmentScreenState
       _heightCalibrationMessage = '';
       unawaited(
         _voiceGuidance.announce(
-          'คำนวณสเกลแล้ว ยกแขนทั้งสองข้างไปด้านหน้า '
-          'ให้ต้นแขนตั้งฉากกับลำตัว เหยียดข้อศอก และอยู่นิ่ง '
-          'ระบบจะวัดเฉพาะแขนฝั่งที่หันเข้ากล้อง',
+          FunctionalReachInstructions.calibratedVoice,
           force: true,
         ),
       );
@@ -725,8 +721,7 @@ class _FunctionalReachAssessmentScreenState
       'ขยับมือถือหรือผู้ทดสอบจนทุกรายการขึ้นว่าพร้อม',
     FunctionalReachState.calibrating =>
       'อยู่นิ่ง ระบบกำลังใช้ส่วนสูง ${widget.heightCm.toStringAsFixed(0)} ซม. คำนวณสเกล',
-    FunctionalReachState.baseline =>
-      'ยกแขนทั้งสองข้างไปด้านหน้า ระบบวัดเฉพาะแขนฝั่งกล้อง',
+    FunctionalReachState.baseline => FunctionalReachInstructions.baselineDetail,
     FunctionalReachState.ready =>
       'เตรียมตัวให้พร้อม ระบบจะเริ่มเองหลังนับถอยหลัง',
     FunctionalReachState.reaching => 'เอื้อมไปข้างหน้าโดยไม่ขยับเท้า',
@@ -796,7 +791,7 @@ class _FunctionalReachAssessmentScreenState
         'ข้อศอก ${_formatAngle(tracked.elbowAngleDegrees)}',
         'ความมั่นใจแขน ${_formatConfidence(armConfidence)}  '
             '· ${_formatFps(_debugMetrics?.framesPerSecond)}',
-        'แขนอีกข้างไม่ใช้ในการวัด',
+        'แขนอีกข้างปล่อยไว้ข้างลำตัว (ไม่ใช้วัด)',
       ],
     );
   }
@@ -1005,9 +1000,7 @@ class _FunctionalReachAssessmentScreenState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          posture?.guidance ??
-              'ยกแขนทั้งสองข้างไปด้านหน้า '
-                  'ให้แขนฝั่งกล้องตั้งฉากกับลำตัว เหยียดข้อศอก และอยู่นิ่ง',
+          posture?.guidance ?? FunctionalReachInstructions.baselinePrompt,
           style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: 10),
@@ -1047,7 +1040,7 @@ class _FunctionalReachAssessmentScreenState
           seconds: _readyCountdown,
           readyMessage: postureReady
               ? 'เตรียมตัวได้เลย'
-              : 'ยกแขนทั้งสองข้างไปด้านหน้า ระบบตรวจเฉพาะแขนฝั่งกล้อง',
+              : FunctionalReachInstructions.readyPrompt,
           countdownMessage: 'ระบบจะเริ่มวัดเอง ไม่ต้องกดปุ่ม',
         ),
       ],

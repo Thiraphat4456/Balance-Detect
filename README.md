@@ -129,7 +129,7 @@ positioning → calibrating → baseline → ready → reaching → completed
 4. Intro ขอส่วนสูงผู้ทดสอบเป็นเซนติเมตรก่อนเปิดกล้อง
 5. หลังจัดตำแหน่ง ระบบเก็บ shoulder-to-ankle span หลายเฟรม แล้วใช้ anthropometric prior ใน `AnthropometricHeightCalibrationService` ประมาณสเกลจากส่วนสูงที่กรอก พร้อมชดเชยอัตราส่วนกว้าง/สูงของภาพก่อนนำสเกลแนวตั้งมาใช้กับระยะเอื้อมแนวนอน
 6. `CalibrationRecord` เก็บ `anthropometricBodyHeight`, ส่วนสูงอ้างอิง, scale, timestamp และ confidence; `ExplicitDistanceCalibrationService` ยังอยู่ใน domain สำหรับ fallback/การทดลองที่ต้องการวัตถุอ้างอิง
-7. ก่อนเก็บ baseline ระบบคำนวณมุม hip-shoulder-elbow และ shoulder-elbow-wrist โดยชดเชยอัตราส่วนภาพ รอให้ต้นแขนอยู่ใกล้ 90 องศาและข้อศอกเหยียด พร้อม checklist/เสียงบอกให้ยกแขน ลดแขน หรือเหยียดข้อศอก
+7. ก่อนเก็บ baseline ผู้ทดสอบยกเฉพาะแขนฝั่งกล้อง กำมือ และปล่อยแขนอีกข้างไว้ข้างลำตัว ระบบคำนวณมุม hip-shoulder-elbow และ shoulder-elbow-wrist โดยชดเชยอัตราส่วนภาพ รอให้ต้นแขนอยู่ใกล้ 90 องศาและข้อศอกเหยียด พร้อม checklist/เสียงบอกให้ยกแขน ลดแขน หรือเหยียดข้อศอก (โมเดล pose ไม่มีจุดนิ้วมือและไม่ใช้แขนฝั่งถูกบัง จึงแนะนำแต่ไม่อ้างว่าตรวจสองเงื่อนไขนั้นได้)
 8. ล็อกข้างของแขนที่ใช้วัดจากเฟรมแรกที่ท่าผ่าน แล้วใช้ข้อมือข้างเดิมตลอด baseline และช่วงเอื้อม เพื่อไม่ให้ confidence ที่สลับซ้าย/ขวาทำให้ตำแหน่งกระโดด
 9. เก็บ wrist/feet baseline หลายเฟรมมากกว่า 2 วินาที ตรวจ maximum jitter ก่อนยอมรับ หากท่าแขนหลุดระหว่างเก็บ baseline จะล้างตัวอย่างเดิมและเริ่มเก็บใหม่
 10. ช่วง reach ใช้ moving average ของ wrist และคำนวณ horizontal displacement จาก baseline ผ่าน calibration scale

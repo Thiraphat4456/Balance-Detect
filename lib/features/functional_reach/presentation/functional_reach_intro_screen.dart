@@ -2,6 +2,7 @@ import 'package:balance_detect/core/constants/assessment_config.dart';
 import 'package:balance_detect/core/widgets/assessment_intro_layout.dart';
 import 'package:balance_detect/core/widgets/body_illustrations.dart';
 import 'package:balance_detect/core/widgets/height_input_card.dart';
+import 'package:balance_detect/features/functional_reach/domain/functional_reach_instructions.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -57,7 +58,7 @@ class _FunctionalReachIntroScreenState
     illustration: const SideReachIllustration(),
     instructions: const <String>[
       'ตั้งมือถือให้มั่นคง แล้วตรวจว่ากล้องหน้าเห็นร่างกายเต็มตัว',
-      'ยืนด้านข้างกล้อง เหยียดแขนไปด้านหน้าให้ต้นแขนตั้งฉากกับลำตัว แล้วอยู่นิ่ง',
+      FunctionalReachInstructions.introSetup,
       'เอื้อมไปข้างหน้าให้ไกลที่สุด โดยไม่ก้าวหรือขยับเท้า',
     ],
     notice:

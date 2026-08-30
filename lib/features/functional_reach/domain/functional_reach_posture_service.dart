@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:balance_detect/core/constants/assessment_config.dart';
+import 'package:balance_detect/features/functional_reach/domain/functional_reach_instructions.dart';
 import 'package:balance_detect/features/pose/domain/pose_frame.dart';
 
 class FunctionalReachPostureValidation {
@@ -28,17 +29,16 @@ class FunctionalReachPostureValidation {
     final armToTorsoAngle = armToTorsoAngleDegrees!;
     if (armToTorsoAngle <
         AssessmentConfig.functionalReachArmToTorsoAngleMinDegrees) {
-      return 'ยกแขนทั้งสองข้างไปด้านหน้า ให้ต้นแขนฝั่งกล้องตั้งฉากกับลำตัว '
-          'ไม่ต้องยกสูงกว่าระดับไหล่';
+      return FunctionalReachInstructions.raiseTrackedArm;
     }
     if (armToTorsoAngle >
         AssessmentConfig.functionalReachArmToTorsoAngleMaxDegrees) {
-      return 'ลดแขนทั้งสองข้างลงเล็กน้อย ให้แขนฝั่งกล้องตั้งฉากกับลำตัว';
+      return FunctionalReachInstructions.lowerTrackedArm;
     }
     if (!elbowExtended) {
-      return 'เหยียดข้อศอกทั้งสองข้างให้ตรง แล้วอยู่นิ่ง';
+      return FunctionalReachInstructions.extendTrackedElbow;
     }
-    return 'ท่าแขนฝั่งกล้องพร้อมแล้ว อยู่นิ่ง ระบบกำลังเก็บตำแหน่งเริ่มต้น';
+    return FunctionalReachInstructions.trackedArmReady;
   }
 }
 

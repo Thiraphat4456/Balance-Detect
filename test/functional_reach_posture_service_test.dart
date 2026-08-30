@@ -1,3 +1,4 @@
+import 'package:balance_detect/features/functional_reach/domain/functional_reach_instructions.dart';
 import 'package:balance_detect/features/functional_reach/domain/functional_reach_posture_service.dart';
 import 'package:balance_detect/features/pose/domain/pose_frame.dart';
 import 'package:balance_detect/features/pose/domain/pose_validation.dart';
@@ -5,6 +6,20 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   const service = FunctionalReachPostureService();
+
+  test('all Functional Reach prompts consistently require one arm', () {
+    for (final prompt in FunctionalReachInstructions.allSingleArmPrompts) {
+      expect(prompt, isNot(contains('แขนทั้งสองข้าง')));
+    }
+    expect(
+      FunctionalReachInstructions.positioningVoice,
+      contains('ยกเฉพาะแขนฝั่งที่หันเข้ากล้อง'),
+    );
+    expect(
+      FunctionalReachInstructions.positioningVoice,
+      contains('ปล่อยแขนอีกข้างไว้ข้างลำตัว'),
+    );
+  });
 
   test('accepts a horizontal upper arm with an extended elbow', () {
     final result = service.validate(
@@ -50,7 +65,8 @@ void main() {
     );
 
     expect(result.armPerpendicularToTorso, isFalse);
-    expect(result.guidance, contains('ยกแขนทั้งสองข้างไปด้านหน้า'));
+    expect(result.guidance, contains('ยกแขนฝั่งกล้องไปด้านหน้า'));
+    expect(result.guidance, isNot(contains('ทั้งสองข้าง')));
     expect(result.guidance, contains('ตั้งฉากกับลำตัว'));
     expect(result.guidance, contains('ไม่ต้องยกสูงกว่าระดับไหล่'));
     expect(result.canMeasure, isFalse);
@@ -69,7 +85,8 @@ void main() {
 
     expect(result.armPerpendicularToTorso, isTrue);
     expect(result.elbowExtended, isFalse);
-    expect(result.guidance, contains('เหยียดข้อศอก'));
+    expect(result.guidance, contains('เหยียดข้อศอกฝั่งกล้อง'));
+    expect(result.guidance, isNot(contains('ทั้งสองข้าง')));
     expect(result.canMeasure, isFalse);
   });
 
