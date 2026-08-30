@@ -25,6 +25,7 @@ import 'package:balance_detect/features/functional_reach/domain/reach_measuremen
 import 'package:balance_detect/features/functional_reach/presentation/reach_threshold_bar.dart';
 import 'package:balance_detect/features/pose/domain/pose_frame.dart';
 import 'package:balance_detect/features/pose/domain/pose_validation.dart';
+import 'package:balance_detect/features/pose/presentation/pose_skeleton_overlay.dart';
 import 'package:balance_detect/features/pose/services/camera_pose_service.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
@@ -85,6 +86,7 @@ class _FunctionalReachAssessmentScreenState
   int? _positioningCountdown;
   int? _readyCountdown;
   bool _voiceEnabled = true;
+  bool _showPoseSkeleton = true;
 
   @override
   void initState() {
@@ -637,6 +639,18 @@ class _FunctionalReachAssessmentScreenState
         title: const Text('วัดระยะเอื้อม'),
         actions: [
           IconButton(
+            onPressed: () {
+              setState(() => _showPoseSkeleton = !_showPoseSkeleton);
+            },
+            tooltip: _showPoseSkeleton ? 'ซ่อนโครงกระดูก' : 'แสดงโครงกระดูก',
+            icon: Icon(
+              Icons.accessibility_new_rounded,
+              color: _showPoseSkeleton
+                  ? Theme.of(context).colorScheme.primary
+                  : null,
+            ),
+          ),
+          IconButton(
             onPressed: _toggleVoice,
             tooltip: _voiceEnabled ? 'ปิดเสียงคำแนะนำ' : 'เปิดเสียงคำแนะนำ',
             icon: Icon(
@@ -715,9 +729,15 @@ class _FunctionalReachAssessmentScreenState
               fit: StackFit.expand,
               children: [
                 CameraPreview(controller),
+                if (_showPoseSkeleton)
+                  PoseSkeletonOverlay(
+                    frame: _lastFrame,
+                    highlightedSide: _trackedSide,
+                  ),
                 IgnorePointer(
                   child: CustomPaint(painter: _CameraGuidePainter()),
                 ),
+                if (_showPoseSkeleton) _buildPoseDiagnostics(),
                 if (ref.watch(debugOverlayProvider)) _buildDebugOverlay(),
               ],
             ),
@@ -726,6 +746,116 @@ class _FunctionalReachAssessmentScreenState
       ),
     );
   }
+
+  PrimaryBodySide? get _trackedSide =>
+      _measurementSide ?? _activeArmSide ?? _validation?.primarySide;
+
+  Widget _buildPoseDiagnostics() {
+    final frame = _lastFrame;
+    if (frame == null) {
+      return _buildPoseDiagnosticCard(
+        statusColor: Colors.white,
+        status: 'กำลังค้นหาร่างกาย',
+        lines: const ['จุดแดง = ความมั่นใจต่ำ'],
+      );
+    }
+
+    final left = _postureService.validate(frame, PrimaryBodySide.left);
+    final right = _postureService.validate(frame, PrimaryBodySide.right);
+    final trackedSide = _trackedSide ?? PrimaryBodySide.left;
+    final tracked = trackedSide == PrimaryBodySide.left ? left : right;
+    final sideLabel = trackedSide == PrimaryBodySide.left ? 'ซ้าย' : 'ขวา';
+    final (statusColor, status) = _poseDiagnosticStatus(tracked);
+    return _buildPoseDiagnosticCard(
+      statusColor: statusColor,
+      status: status,
+      lines: [
+        'เส้นเหลือง: แขน$sideLabelของผู้ทดสอบ',
+        'แขน–ลำตัว  ซ้าย ${_formatAngle(left.armToTorsoAngleDegrees)}  '
+            'ขวา ${_formatAngle(right.armToTorsoAngleDegrees)}',
+        'ข้อศอกแขน$sideLabel ${_formatAngle(tracked.elbowAngleDegrees)}',
+        'จุดแดง = ความมั่นใจต่ำ',
+      ],
+    );
+  }
+
+  Widget _buildPoseDiagnosticCard({
+    required Color statusColor,
+    required String status,
+    required List<String> lines,
+  }) {
+    return Align(
+      alignment: Alignment.topRight,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 230),
+        margin: const EdgeInsets.all(8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.74),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.white.withValues(alpha: .24)),
+        ),
+        child: DefaultTextStyle(
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 11,
+            height: 1.35,
+            fontWeight: FontWeight.w500,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: statusColor,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      status,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 3),
+              for (final line in lines) Text(line),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  (Color, String) _poseDiagnosticStatus(
+    FunctionalReachPostureValidation posture,
+  ) {
+    if (!posture.landmarksReliable) {
+      return (const Color(0xFFFF6259), 'จุดแขนยังไม่ชัด');
+    }
+    final angle = posture.armToTorsoAngleDegrees!;
+    if (angle < AssessmentConfig.functionalReachArmToTorsoAngleMinDegrees) {
+      return (const Color(0xFFFFC247), 'แขนยังไม่ตั้งฉาก');
+    }
+    if (angle > AssessmentConfig.functionalReachArmToTorsoAngleMaxDegrees) {
+      return (const Color(0xFFFFC247), 'แขนสูงเกินมุมตั้งฉาก');
+    }
+    if (!posture.elbowExtended) {
+      return (const Color(0xFFFFC247), 'เหยียดข้อศอกให้ตรง');
+    }
+    return (const Color(0xFF55D982), 'ท่าแขนพร้อม');
+  }
+
+  String _formatAngle(double? angle) =>
+      angle == null ? '—' : '${angle.toStringAsFixed(0)}°';
 
   Widget _buildDebugOverlay() {
     final metrics = _debugMetrics;
