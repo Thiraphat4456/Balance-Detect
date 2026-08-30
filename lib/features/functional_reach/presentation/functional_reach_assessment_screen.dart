@@ -57,6 +57,7 @@ class _FunctionalReachAssessmentScreenState
   StreamSubscription<PoseDebugMetrics>? _metricsSubscription;
   PoseValidation? _validation;
   FunctionalReachPostureValidation? _postureValidation;
+  PrimaryBodySide? _activeArmSide;
   PrimaryBodySide? _measurementSide;
   PoseFrame? _lastFrame;
   PoseDebugMetrics? _debugMetrics;
@@ -137,8 +138,21 @@ class _FunctionalReachAssessmentScreenState
       requireSideView: true,
     );
     _validation = validation;
-    final postureSide = _measurementSide ?? validation.primarySide;
+    final postureSide =
+        _measurementSide ??
+        _postureService.selectRaisedArmSide(
+          frame,
+          fallback: _activeArmSide ?? validation.primarySide,
+        );
     final posture = _postureService.validate(frame, postureSide);
+    if (_measurementSide == null && _activeArmSide != postureSide) {
+      AppLogger.event('reach_active_arm_selected', <String, Object?>{
+        'side': postureSide.name,
+        'pose_primary_side': validation.primarySide.name,
+        'arm_to_torso_angle': posture.armToTorsoAngleDegrees,
+      });
+      _activeArmSide = postureSide;
+    }
     _postureValidation = posture;
     if (validation.canStart && !_poseAcquiredLogged) {
       _poseAcquiredLogged = true;
@@ -303,7 +317,8 @@ class _FunctionalReachAssessmentScreenState
       _heightCalibrationMessage = '';
       unawaited(
         _voiceGuidance.announce(
-          'คำนวณสเกลแล้ว ยกแขนข้างที่เห็นให้ตั้งฉากกับลำตัว '
+          'คำนวณสเกลแล้ว เหยียดแขนข้างที่เห็นไปด้านหน้า '
+          'ให้ต้นแขนตั้งฉากกับลำตัว '
           'เหยียดข้อศอก และอยู่นิ่ง',
           force: true,
         ),
@@ -676,7 +691,7 @@ class _FunctionalReachAssessmentScreenState
       'ขยับมือถือหรือผู้ทดสอบจนทุกรายการขึ้นว่าพร้อม',
     FunctionalReachState.calibrating =>
       'อยู่นิ่ง ระบบกำลังใช้ส่วนสูง ${widget.heightCm.toStringAsFixed(0)} ซม. คำนวณสเกล',
-    FunctionalReachState.baseline => 'ยกแขนและอยู่นิ่งจนแถบเต็ม',
+    FunctionalReachState.baseline => 'เหยียดแขนไปด้านหน้าและอยู่นิ่งจนแถบเต็ม',
     FunctionalReachState.ready =>
       'เตรียมตัวให้พร้อม ระบบจะเริ่มเองหลังนับถอยหลัง',
     FunctionalReachState.reaching => 'เอื้อมไปข้างหน้าโดยไม่ขยับเท้า',
@@ -816,7 +831,8 @@ class _FunctionalReachAssessmentScreenState
       children: [
         Text(
           posture?.guidance ??
-              'ยกแขนให้ตั้งฉากกับลำตัว เหยียดข้อศอก และอยู่นิ่ง',
+              'เหยียดแขนไปด้านหน้าให้ต้นแขนตั้งฉากกับลำตัว '
+                  'เหยียดข้อศอก และอยู่นิ่ง',
           style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: 10),
@@ -856,7 +872,7 @@ class _FunctionalReachAssessmentScreenState
           seconds: _readyCountdown,
           readyMessage: postureReady
               ? 'เตรียมตัวได้เลย'
-              : 'ยกแขนตั้งฉากกับลำตัวและเหยียดข้อศอก',
+              : 'เหยียดแขนไปด้านหน้าให้ตั้งฉากกับลำตัวและเหยียดข้อศอก',
           countdownMessage: 'ระบบจะเริ่มวัดเอง ไม่ต้องกดปุ่ม',
         ),
       ],

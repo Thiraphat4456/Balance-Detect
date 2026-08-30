@@ -6,7 +6,7 @@ class SideReachIllustration extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Semantics(
-    label: 'ภาพคนยืนด้านข้าง ยกแขนและเอื้อมไปข้างหน้า',
+    label: 'ภาพคนยืนด้านข้าง เหยียดแขนไปด้านหน้าและเอื้อมไปข้างหน้า',
     child: SizedBox(
       width: 220,
       height: 170,

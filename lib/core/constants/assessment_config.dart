@@ -36,6 +36,10 @@ abstract final class AssessmentConfig {
   // before clinical use.
   static const functionalReachArmToTorsoAngleMinDegrees = 75.0;
   static const functionalReachArmToTorsoAngleMaxDegrees = 105.0;
+  // Keep the currently selected arm until the other arm is raised by a clear
+  // margin. This prevents left/right selection from flipping with pose jitter.
+  static const functionalReachArmSelectionSwitchMarginDegrees = 12.0;
+  static const functionalReachArmSelectionActivationDegrees = 45.0;
   static const functionalReachElbowAngleMinDegrees = 150.0;
   static const reachWindow = Duration(seconds: 10);
   static const reachSmoothingWindow = 5;
