@@ -27,6 +27,15 @@ android {
             // Controlled prototype builds use the debug key. Distribution
             // builds must supply a private release keystore.
             signingConfig = signingConfigs.getByName("debug")
+
+            // CameraX/WorkManager and the bundled ML Kit pose detector still
+            // discover Android components through reflection. The current R8
+            // release pass removes required constructors on this dependency
+            // set, causing the app to crash in AndroidX Startup before Flutter
+            // is created. Keep shrinking disabled until these dependencies are
+            // upgraded or verified keep rules are added and tested on-device.
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 }
