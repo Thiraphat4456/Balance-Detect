@@ -134,7 +134,7 @@ positioning → calibrating → baseline → ready → reaching → completed
 9. เก็บ wrist/feet baseline หลายเฟรมมากกว่า 2 วินาที ตรวจ maximum jitter ก่อนยอมรับ หากท่าแขนหลุดระหว่างเก็บ baseline จะล้างตัวอย่างเดิมและเริ่มเก็บใหม่
 10. ช่วง reach ใช้ moving average ของ wrist และคำนวณ horizontal displacement จาก baseline ผ่าน calibration scale
 11. เก็บค่าสูงสุดตลอด assessment window ไม่ใช้ค่าของเฟรมสุดท้าย
-12. ติดตาม midpoint ของ heel + foot index ซึ่งเป็น planted-foot anchor ที่มีองค์ประกอบคงที่ ไม่นำ ankle joint ซึ่งเคลื่อนตามการเอนตัวมานับเป็นการก้าว จากนั้นทำ smoothing ใช้ noise floor ที่ปรับตามสเกลภาพ และต้องเคลื่อนเกิน tolerance ต่อเนื่องหลายเฟรมจึงเป็น invalid
+12. ติดตาม midpoint ของ heel + foot index ซึ่งเป็น planted-foot anchor ที่มีองค์ประกอบคงที่ ไม่นำ ankle joint ที่เคลื่อนตามการเอนตัวมานับเป็นการก้าวเพียงลำพัง จากนั้นทำ smoothing ใช้ noise floor ที่ปรับตามสเกลภาพ ชดเชยการเลื่อนทั้งโครงด้วยสะโพก และต้องมีการเคลื่อนของข้อเท้ารองรับ heel/toe ต่อเนื่องหลายเฟรมจึงเป็น invalid จึงไม่ตัดสินจาก pose drift ของจุดเดียว
 13. เก็บ metric (`distanceCm`) เป็นหลัก แล้วค่อยแปลง `inch = cm / 2.54`
 14. Classification: `< 7.0 inch = warning`, `>= 7.0 inch = normal`
 15. ระหว่าง positioning ระบบพูดคำสั่งที่เปลี่ยนตาม validation (เช่น ถอยออก, ขยับกล้องลง, หันด้านข้าง) โดย throttle ไม่ให้พูดซ้ำถี่เกินไป เมื่อพร้อมแล้วจะแจ้งเสียงและนับ 3–2–1 เพื่อเข้าสู่ขั้นตอนถัดไปเอง ไม่ต้องกดปุ่มเริ่ม

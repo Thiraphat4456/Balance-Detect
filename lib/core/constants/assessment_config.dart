@@ -46,6 +46,11 @@ abstract final class AssessmentConfig {
   static const footMovementBaselineNoiseMarginCm = 0.5;
   static const footMovementSmoothingWindow = 5;
   static const footMovementConfirmationFrames = 5;
+  // A foot step should move the ankle with the heel/toe contact anchor. If
+  // only heel/toe drift while the ankle remains fixed, treat it as a pose
+  // landmark artifact instead of invalidating the assessment.
+  static const footMovementAnkleSupportRatio = 0.35;
+  static const footMovementAnkleSupportFloorCm = 1.0;
 
   static const stepMinNormalizedDisplacement = 0.035;
   static const stepFootLengthMultiplier = 0.60;

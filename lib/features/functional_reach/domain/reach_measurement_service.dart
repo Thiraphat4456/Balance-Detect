@@ -14,6 +14,9 @@ class ReachMeasurementSnapshot {
     this.rightFootMovementCm = 0,
     this.footMovementThresholdCm = 0,
     this.trackedFootSide,
+    this.trackedFootRawMovementCm = 0,
+    this.trackedFootRelativeMovementCm = 0,
+    this.trackedFootAnkleMovementCm = 0,
   });
 
   final double maximumDistanceCm;
@@ -23,6 +26,9 @@ class ReachMeasurementSnapshot {
   final double rightFootMovementCm;
   final double footMovementThresholdCm;
   final PrimaryBodySide? trackedFootSide;
+  final double trackedFootRawMovementCm;
+  final double trackedFootRelativeMovementCm;
+  final double trackedFootAnkleMovementCm;
 
   double get trackedFootMovementCm => switch (trackedFootSide) {
     PrimaryBodySide.left => leftFootMovementCm,
@@ -45,6 +51,12 @@ class ReachMeasurementService {
   final List<NormalizedPoint> _wristSmoothing = <NormalizedPoint>[];
   final List<NormalizedPoint> _leftFootSmoothing = <NormalizedPoint>[];
   final List<NormalizedPoint> _rightFootSmoothing = <NormalizedPoint>[];
+  final List<NormalizedPoint> _trackedAnkleBaselineSamples =
+      <NormalizedPoint>[];
+  final List<NormalizedPoint> _trackedHipBaselineSamples =
+      <NormalizedPoint>[];
+  final List<NormalizedPoint> _trackedAnkleSmoothing = <NormalizedPoint>[];
+  final List<NormalizedPoint> _trackedHipSmoothing = <NormalizedPoint>[];
   final List<double> _trackedFootBaselineAspectRatios = <double>[];
   final List<double> _poseConfidences = <double>[];
 
@@ -52,6 +64,8 @@ class ReachMeasurementService {
   NormalizedPoint? _baselineWrist;
   NormalizedPoint? _baselineLeftFoot;
   NormalizedPoint? _baselineRightFoot;
+  NormalizedPoint? _baselineTrackedAnkle;
+  NormalizedPoint? _baselineTrackedHip;
   double _maximumDistanceCm = 0;
   bool _footMovementDetected = false;
   int _trackedFootCandidateFrames = 0;
@@ -60,6 +74,9 @@ class ReachMeasurementService {
   double _footMovementThresholdCm = 0;
   double _baselineFootJitterNormalized = 0;
   double _baselineFootJitterCm = 0;
+  double _trackedFootRawMovementCm = 0;
+  double _trackedFootRelativeMovementCm = 0;
+  double _trackedFootAnkleMovementCm = 0;
 
   bool get hasBaseline =>
       _baselineWrist != null && _baselineForSide(_trackedFootSide) != null;
@@ -78,7 +95,14 @@ class ReachMeasurementService {
 
     final wrist = frame[primarySide.wrist];
     final trackedFoot = _plantedFootAnchor(frame, primarySide);
-    if (wrist == null || trackedFoot == null) return;
+    final trackedAnkle = frame[primarySide.ankle];
+    final trackedHip = frame[primarySide.hip];
+    if (wrist == null ||
+        trackedFoot == null ||
+        !_isReliable(trackedAnkle) ||
+        !_isReliable(trackedHip)) {
+      return;
+    }
 
     final otherSide = primarySide == PrimaryBodySide.left
         ? PrimaryBodySide.right
@@ -86,6 +110,8 @@ class ReachMeasurementService {
     final otherFoot = _plantedFootAnchor(frame, otherSide);
     _wristBaseline.add(wrist);
     _baselineValuesForSide(primarySide).add(trackedFoot);
+    _trackedAnkleBaselineSamples.add(trackedAnkle!);
+    _trackedHipBaselineSamples.add(trackedHip!);
     if (otherFoot != null) {
       _baselineValuesForSide(otherSide).add(otherFoot);
     }
@@ -97,7 +123,11 @@ class ReachMeasurementService {
     if (trackedSide == null) return false;
     final trackedFootBaseline = _baselineValuesForSide(trackedSide);
     if (_wristBaseline.length < AssessmentConfig.reachBaselineMinFrames ||
-        trackedFootBaseline.length < AssessmentConfig.reachBaselineMinFrames) {
+        trackedFootBaseline.length < AssessmentConfig.reachBaselineMinFrames ||
+        _trackedAnkleBaselineSamples.length <
+            AssessmentConfig.reachBaselineMinFrames ||
+        _trackedHipBaselineSamples.length <
+            AssessmentConfig.reachBaselineMinFrames) {
       return false;
     }
     final wrist = NormalizedPoint.average(_wristBaseline);
@@ -122,6 +152,8 @@ class ReachMeasurementService {
     }
 
     _baselineWrist = wrist;
+    _baselineTrackedAnkle = _medianPoint(_trackedAnkleBaselineSamples);
+    _baselineTrackedHip = _medianPoint(_trackedHipBaselineSamples);
     if (trackedSide == PrimaryBodySide.left) {
       _baselineLeftFoot = trackedFoot;
     } else {
@@ -148,6 +180,8 @@ class ReachMeasurementService {
       final rightBaseline = _baselineRightFoot;
       if (leftBaseline != null) _leftFootSmoothing.add(leftBaseline);
       if (rightBaseline != null) _rightFootSmoothing.add(rightBaseline);
+      _trackedAnkleSmoothing.add(_baselineTrackedAnkle!);
+      _trackedHipSmoothing.add(_baselineTrackedHip!);
     }
     return true;
   }
@@ -170,10 +204,22 @@ class ReachMeasurementService {
     final wrist = frame[primarySide.wrist];
     final leftFoot = _plantedFootAnchor(frame, PrimaryBodySide.left);
     final rightFoot = _plantedFootAnchor(frame, PrimaryBodySide.right);
+    final trackedAnklePoint = frame[trackedSide.ankle];
+    final trackedHipPoint = frame[trackedSide.hip];
     final trackedFoot = trackedSide == PrimaryBodySide.left
         ? leftFoot
         : rightFoot;
-    if (wrist == null || trackedFoot == null) {
+    if (wrist == null ||
+        trackedFoot == null ||
+        !_isReliable(trackedAnklePoint) ||
+        !_isReliable(trackedHipPoint)) {
+      _trackedFootCandidateFrames = 0;
+      return snapshot;
+    }
+
+    final baselineTrackedAnkle = _baselineTrackedAnkle;
+    final baselineTrackedHip = _baselineTrackedHip;
+    if (baselineTrackedAnkle == null || baselineTrackedHip == null) {
       _trackedFootCandidateFrames = 0;
       return snapshot;
     }
@@ -190,17 +236,17 @@ class ReachMeasurementService {
     );
     _maximumDistanceCm = math.max(_maximumDistanceCm, distanceCm);
 
-    _leftFootMovementCm = _updateFootMovement(
-      smoothing: _leftFootSmoothing,
-      point: leftFoot,
-      baseline: _baselineLeftFoot,
-      frame: frame,
+    final smoothedLeftFoot = _smoothPoint(_leftFootSmoothing, leftFoot);
+    final smoothedRightFoot = _smoothPoint(_rightFootSmoothing, rightFoot);
+    final leftFootMovement = _movementFromBaseline(
+      smoothedLeftFoot,
+      _baselineLeftFoot,
+      frame.imageAspectRatio,
     );
-    _rightFootMovementCm = _updateFootMovement(
-      smoothing: _rightFootSmoothing,
-      point: rightFoot,
-      baseline: _baselineRightFoot,
-      frame: frame,
+    final rightFootMovement = _movementFromBaseline(
+      smoothedRightFoot,
+      _baselineRightFoot,
+      frame.imageAspectRatio,
     );
     final normalizedNoiseFloorCm = _calibrationService
         .normalizedDistanceToCentimeters(
@@ -215,6 +261,50 @@ class ReachMeasurementService {
       AssessmentConfig.footMovementToleranceCm,
       math.max(normalizedNoiseFloorCm, baselineNoiseThresholdCm),
     );
+    final smoothedTrackedFoot = trackedSide == PrimaryBodySide.left
+        ? smoothedLeftFoot
+        : smoothedRightFoot;
+    final smoothedTrackedAnkle = _smoothPoint(
+      _trackedAnkleSmoothing,
+      trackedAnklePoint,
+    );
+    final smoothedTrackedHip = _smoothPoint(
+      _trackedHipSmoothing,
+      trackedHipPoint,
+    );
+    final baselineTrackedFoot = _baselineForSide(trackedSide);
+    final rawTrackedMovement = _movementFromBaseline(
+      smoothedTrackedFoot,
+      baselineTrackedFoot,
+      frame.imageAspectRatio,
+    );
+    final relativeTrackedMovement = _relativeMovementFromBaseline(
+      point: smoothedTrackedFoot,
+      body: smoothedTrackedHip,
+      baselinePoint: baselineTrackedFoot,
+      baselineBody: baselineTrackedHip,
+      imageAspectRatio: frame.imageAspectRatio,
+    );
+    final ankleTrackedMovement = _movementFromBaseline(
+      smoothedTrackedAnkle,
+      baselineTrackedAnkle,
+      frame.imageAspectRatio,
+    );
+    final acceptedTrackedMovement = _acceptedFootMovement(
+      rawMovementCm: rawTrackedMovement,
+      relativeMovementCm: relativeTrackedMovement,
+      ankleMovementCm: ankleTrackedMovement,
+      thresholdCm: _footMovementThresholdCm,
+    );
+    _trackedFootRawMovementCm = rawTrackedMovement;
+    _trackedFootRelativeMovementCm = relativeTrackedMovement;
+    _trackedFootAnkleMovementCm = ankleTrackedMovement;
+    _leftFootMovementCm = trackedSide == PrimaryBodySide.left
+        ? acceptedTrackedMovement
+        : leftFootMovement;
+    _rightFootMovementCm = trackedSide == PrimaryBodySide.right
+        ? acceptedTrackedMovement
+        : rightFootMovement;
     final trackedFootMovementCm = trackedSide == PrimaryBodySide.left
         ? _leftFootMovementCm
         : _rightFootMovementCm;
@@ -242,22 +332,69 @@ class ReachMeasurementService {
       rightFootMovementCm: _rightFootMovementCm,
       footMovementThresholdCm: _footMovementThresholdCm,
       trackedFootSide: _trackedFootSide,
+      trackedFootRawMovementCm: _trackedFootRawMovementCm,
+      trackedFootRelativeMovementCm: _trackedFootRelativeMovementCm,
+      trackedFootAnkleMovementCm: _trackedFootAnkleMovementCm,
     );
   }
 
-  double _updateFootMovement({
-    required List<NormalizedPoint> smoothing,
-    required NormalizedPoint? point,
-    required NormalizedPoint? baseline,
-    required PoseFrame frame,
-  }) {
-    if (point == null || baseline == null) return 0;
+  NormalizedPoint? _smoothPoint(
+    List<NormalizedPoint> smoothing,
+    NormalizedPoint? point,
+  ) {
+    if (point == null) return null;
     _addSmoothedPoint(smoothing, point);
-    return _pointDistanceCm(
-      NormalizedPoint.average(smoothing),
-      baseline,
-      frame.imageAspectRatio,
+    return NormalizedPoint.average(smoothing);
+  }
+
+  double _movementFromBaseline(
+    NormalizedPoint? point,
+    NormalizedPoint? baseline,
+    double imageAspectRatio,
+  ) => point == null || baseline == null
+      ? 0
+      : _pointDistanceCm(point, baseline, imageAspectRatio);
+
+  double _relativeMovementFromBaseline({
+    required NormalizedPoint? point,
+    required NormalizedPoint? body,
+    required NormalizedPoint? baselinePoint,
+    required NormalizedPoint? baselineBody,
+    required double imageAspectRatio,
+  }) {
+    if (point == null ||
+        body == null ||
+        baselinePoint == null ||
+        baselineBody == null) {
+      return 0;
+    }
+    return _distanceCmFromDelta(
+      dx: (point.x - body.x) - (baselinePoint.x - baselineBody.x),
+      dy: (point.y - body.y) - (baselinePoint.y - baselineBody.y),
+      imageAspectRatio: imageAspectRatio,
     );
+  }
+
+  double _acceptedFootMovement({
+    required double rawMovementCm,
+    required double relativeMovementCm,
+    required double ankleMovementCm,
+    required double thresholdCm,
+  }) {
+    // Absolute displacement alone is not enough: a global pose translation
+    // can move every landmark in the image while the feet remain planted.
+    if (rawMovementCm <= thresholdCm || relativeMovementCm <= thresholdCm) {
+      return 0;
+    }
+    final ankleSupportThreshold = math.max(
+      AssessmentConfig.footMovementAnkleSupportFloorCm,
+      rawMovementCm * AssessmentConfig.footMovementAnkleSupportRatio,
+    );
+    // Heel/toe-only drift with a stable ankle is a model artifact. A real
+    // step should carry the ankle in the same direction as the contact
+    // anchor, so require independent support from that landmark as well.
+    if (ankleMovementCm < ankleSupportThreshold) return 0;
+    return relativeMovementCm;
   }
 
   NormalizedPoint? _plantedFootAnchor(PoseFrame frame, PrimaryBodySide side) {
@@ -288,18 +425,29 @@ class ReachMeasurementService {
     NormalizedPoint point,
     NormalizedPoint baseline,
     double imageAspectRatio,
-  ) {
+  ) => _distanceCmFromDelta(
+    dx: point.x - baseline.x,
+    dy: point.y - baseline.y,
+    imageAspectRatio: imageAspectRatio,
+  );
+
+  double _distanceCmFromDelta({
+    required double dx,
+    required double dy,
+    required double imageAspectRatio,
+  }) {
     final safeAspectRatio = imageAspectRatio.isFinite && imageAspectRatio > 0
         ? imageAspectRatio
         : 1.0;
-    final horizontalCm =
-        (point.x - baseline.x).abs() * calibration.scaleCmPerNormalizedUnit;
+    final horizontalCm = dx.abs() * calibration.scaleCmPerNormalizedUnit;
     final verticalCm =
-        (point.y - baseline.y).abs() *
-        calibration.scaleCmPerNormalizedUnit /
-        safeAspectRatio;
+        dy.abs() * calibration.scaleCmPerNormalizedUnit / safeAspectRatio;
     return math.sqrt(horizontalCm * horizontalCm + verticalCm * verticalCm);
   }
+
+  bool _isReliable(NormalizedPoint? point) =>
+      point != null &&
+      point.confidence >= AssessmentConfig.poseConfidenceThreshold;
 
   List<NormalizedPoint> _baselineValuesForSide(PrimaryBodySide side) =>
       side == PrimaryBodySide.left ? _leftFootBaseline : _rightFootBaseline;

@@ -208,6 +208,104 @@ void main() {
     expect(snapshot.footMovementDetected, isFalse);
   });
 
+  test(
+    'Reach ignores a coherent heel-toe drift when the ankle stays planted',
+    () {
+      final calibration = CalibrationRecord(
+        id: 'height-calibration',
+        sessionId: 'session',
+        timestamp: DateTime(2026),
+        scaleCmPerNormalizedUnit: 204,
+        method: CalibrationMethod.anthropometricBodyHeight,
+        referenceDistanceCm: 170,
+        confidence: .9,
+      );
+      final service = ReachMeasurementService(calibration: calibration);
+      for (var index = 0; index < 12; index += 1) {
+        service.addBaselineFrame(
+          _poseFrame(
+            timestamp: Duration(milliseconds: index * 100),
+            wristX: .40,
+            leftFootX: .30,
+            rightFootX: .60,
+            imageAspectRatio: 2 / 3,
+          ),
+          PrimaryBodySide.left,
+        );
+      }
+      expect(service.finalizeStableBaseline(), isTrue);
+
+      var snapshot = service.snapshot;
+      for (var index = 0; index < 8; index += 1) {
+        snapshot = service.addReachFrame(
+          _poseFrame(
+            timestamp: Duration(milliseconds: 1500 + index * 100),
+            wristX: .48,
+            leftFootX: .33,
+            leftAnkleX: .30,
+            rightFootX: .60,
+            imageAspectRatio: 2 / 3,
+          ),
+          PrimaryBodySide.left,
+        );
+      }
+
+      expect(snapshot.trackedFootRawMovementCm, greaterThan(4));
+      expect(snapshot.leftFootMovementCm, lessThan(1));
+      expect(snapshot.footMovementDetected, isFalse);
+    },
+  );
+
+  test('Reach ignores a whole-skeleton translation with planted feet', () {
+    final calibration = CalibrationRecord(
+      id: 'height-calibration',
+      sessionId: 'session',
+      timestamp: DateTime(2026),
+      scaleCmPerNormalizedUnit: 204,
+      method: CalibrationMethod.anthropometricBodyHeight,
+      referenceDistanceCm: 170,
+      confidence: .9,
+    );
+    final service = ReachMeasurementService(calibration: calibration);
+    for (var index = 0; index < 12; index += 1) {
+      service.addBaselineFrame(
+        _poseFrame(
+          timestamp: Duration(milliseconds: index * 100),
+          wristX: .40,
+          leftFootX: .30,
+          leftAnkleX: .30,
+          leftHipX: .40,
+          leftKneeX: .32,
+          rightFootX: .60,
+          imageAspectRatio: 2 / 3,
+        ),
+        PrimaryBodySide.left,
+      );
+    }
+    expect(service.finalizeStableBaseline(), isTrue);
+
+    var snapshot = service.snapshot;
+    for (var index = 0; index < 8; index += 1) {
+      snapshot = service.addReachFrame(
+        _poseFrame(
+          timestamp: Duration(milliseconds: 1500 + index * 100),
+          wristX: .48,
+          leftFootX: .33,
+          leftAnkleX: .33,
+          leftHipX: .43,
+          leftKneeX: .35,
+          rightFootX: .60,
+          imageAspectRatio: 2 / 3,
+        ),
+        PrimaryBodySide.left,
+      );
+    }
+
+    expect(snapshot.trackedFootRawMovementCm, greaterThan(4));
+    expect(snapshot.leftFootMovementCm, lessThan(1));
+    expect(snapshot.footMovementDetected, isFalse);
+  });
+
   test('Reach rejects an unstable camera-side foot baseline', () {
     final calibration = CalibrationRecord(
       id: 'height-calibration',
@@ -429,6 +527,8 @@ PoseFrame _poseFrame({
   required double leftFootX,
   required double rightFootX,
   double? leftAnkleX,
+  double? leftHipX,
+  double? leftKneeX,
   double imageAspectRatio = 1,
 }) {
   NormalizedPoint point(double x, double y) =>
@@ -439,6 +539,10 @@ PoseFrame _poseFrame({
     landmarks: <BodyLandmark, NormalizedPoint>{
       BodyLandmark.leftWrist: point(wristX, .35),
       BodyLandmark.rightWrist: point(wristX, .35),
+      BodyLandmark.leftHip: point(leftHipX ?? .40, .60),
+      BodyLandmark.leftKnee: point(leftKneeX ?? .32, .74),
+      BodyLandmark.rightHip: point(.60, .60),
+      BodyLandmark.rightKnee: point(.60, .74),
       BodyLandmark.leftAnkle: point(leftAnkleX ?? leftFootX, .85),
       BodyLandmark.leftHeel: point(leftFootX, .88),
       BodyLandmark.leftFootIndex: point(leftFootX + .01, .88),

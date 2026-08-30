@@ -259,6 +259,9 @@ class _FunctionalReachAssessmentScreenState
         AppLogger.event('foot_movement_detected', <String, Object?>{
           'tracked_side': snapshot.trackedFootSide?.name,
           'tracked_cm': snapshot.trackedFootMovementCm,
+          'raw_cm': snapshot.trackedFootRawMovementCm,
+          'relative_cm': snapshot.trackedFootRelativeMovementCm,
+          'ankle_cm': snapshot.trackedFootAnkleMovementCm,
           'left_cm': snapshot.leftFootMovementCm,
           'right_cm': snapshot.rightFootMovementCm,
           'threshold_cm': snapshot.footMovementThresholdCm,
@@ -933,7 +936,10 @@ class _FunctionalReachAssessmentScreenState
           'reach ${_measurement?.maximumDistanceCm.toStringAsFixed(1) ?? '-'} cm\n'
           'foot ${reachSnapshot?.trackedFootSide?.name ?? '-'} '
           '${reachSnapshot?.trackedFootMovementCm.toStringAsFixed(1) ?? '-'} / '
-          '${reachSnapshot?.footMovementThresholdCm.toStringAsFixed(1) ?? '-'} cm',
+          '${reachSnapshot?.footMovementThresholdCm.toStringAsFixed(1) ?? '-'} cm\n'
+          'raw ${reachSnapshot?.trackedFootRawMovementCm.toStringAsFixed(1) ?? '-'} '
+          'rel ${reachSnapshot?.trackedFootRelativeMovementCm.toStringAsFixed(1) ?? '-'} '
+          'ankle ${reachSnapshot?.trackedFootAnkleMovementCm.toStringAsFixed(1) ?? '-'} cm',
           style: const TextStyle(color: Colors.white, fontSize: 12),
         ),
       ),
