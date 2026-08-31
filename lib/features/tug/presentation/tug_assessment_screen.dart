@@ -4,6 +4,7 @@ import 'package:balance_detect/core/constants/assessment_config.dart';
 import 'package:balance_detect/core/domain/assessment_enums.dart';
 import 'package:balance_detect/core/logging/app_logger.dart';
 import 'package:balance_detect/core/providers/app_providers.dart';
+import 'package:balance_detect/core/services/voice_guidance_service.dart';
 import 'package:balance_detect/core/theme/app_theme.dart';
 import 'package:balance_detect/core/utils/id_generator.dart';
 import 'package:balance_detect/core/widgets/app_scaffold_body.dart';
@@ -18,6 +19,7 @@ import 'package:balance_detect/features/tug/domain/sensor_noise_filter.dart';
 import 'package:balance_detect/features/tug/domain/tug_logic.dart';
 import 'package:balance_detect/features/tug/domain/tug_motion_analyzer.dart';
 import 'package:balance_detect/features/tug/domain/tug_result.dart';
+import 'package:balance_detect/features/tug/domain/tug_instructions.dart';
 import 'package:balance_detect/features/tug/services/sensor_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,6 +39,7 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
   final _stateMachine = TugStateMachine();
   final _sensorService = SensorsPlusService();
   final _calibrationService = const SensorCalibrationService();
+  final _voiceGuidance = VoiceGuidanceService();
   final List<SensorSample> _calibrationSamples = <SensorSample>[];
   StreamSubscription<SensorSample>? _sampleSubscription;
   StreamSubscription<Object>? _errorSubscription;
@@ -53,8 +56,10 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
   bool _probing = true;
   bool _calibrationFinalizing = false;
   bool _pendingTestStart = false;
+  bool _automaticCountdownScheduled = false;
   bool _finished = false;
   bool _saving = false;
+  bool _voiceEnabled = true;
   int? _countdown;
   double _calibrationProgress = 0;
 
@@ -62,6 +67,7 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    unawaited(_voiceGuidance.initialize());
     _sampleSubscription = _sensorService.samples.listen(_onSample);
     _errorSubscription = _sensorService.errors.listen((error) {
       if (_stateMachine.state != TugState.idle) {
@@ -88,6 +94,14 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
               : 'ไม่พบ Gyroscope บนอุปกรณ์นี้';
         }
       });
+      unawaited(
+        _voiceGuidance.announce(
+          availability.ready
+              ? TugInstructions.sensorReady
+              : _setupError ?? 'เซนเซอร์ไม่พร้อม กรุณาตรวจสอบอุปกรณ์',
+          force: true,
+        ),
+      );
     } catch (error) {
       AppLogger.error('sensor_probe_failed', error);
       if (mounted) {
@@ -95,6 +109,7 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
           _probing = false;
           _setupError = 'ตรวจสอบเซนเซอร์ไม่สำเร็จ กรุณาลองอีกครั้ง';
         });
+        unawaited(_voiceGuidance.announce(_setupError!, force: true));
       }
     }
   }
@@ -106,6 +121,12 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
     _calibrationStart = null;
     _calibrationProgress = 0;
     _calibrationFinalizing = false;
+    _automaticCountdownScheduled = false;
+    _pendingTestStart = false;
+    _countdown = null;
+    unawaited(
+      _voiceGuidance.announce(TugInstructions.calibration, force: true),
+    );
     try {
       await _sensorService.start();
       if (mounted) setState(() {});
@@ -160,6 +181,10 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
         'elapsedMs': analysis.elapsed.inMilliseconds,
         'confidence': analysis.confidence,
       });
+      final prompt = TugInstructions.promptForState(analysis.state);
+      if (prompt != null && analysis.state != TugState.completed) {
+        unawaited(_voiceGuidance.announce(prompt, force: true));
+      }
     }
     if (analysis.elapsed > AssessmentConfig.tugMaximumDuration) {
       _invalidate(InvalidReason.timeout);
@@ -183,7 +208,10 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
         'samples': calibration.sampleCount,
         'confidence': calibration.confidence,
       });
-      if (mounted) setState(() {});
+      if (mounted) {
+        setState(() {});
+        unawaited(_scheduleAutomaticCountdown());
+      }
     } on FormatException catch (error) {
       AppLogger.event('tug_calibration_failed');
       _setupError = error.message.toString();
@@ -191,18 +219,42 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
     }
   }
 
+  Future<void> _scheduleAutomaticCountdown() async {
+    if (_stateMachine.state != TugState.ready || _automaticCountdownScheduled) {
+      return;
+    }
+    _automaticCountdownScheduled = true;
+    unawaited(_voiceGuidance.announce(TugInstructions.calibrated, force: true));
+    if (mounted) setState(() {});
+    await Future<void>.delayed(
+      _voiceEnabled
+          ? TugInstructions.preCountdownDelay
+          : const Duration(seconds: 1),
+    );
+    if (!mounted || _stateMachine.state != TugState.ready) return;
+    await _countdownAndStart();
+  }
+
   Future<void> _countdownAndStart() async {
     if (_stateMachine.state != TugState.ready || _countdown != null) return;
     for (var count = 3; count >= 1; count -= 1) {
       if (!mounted || _stateMachine.state != TugState.ready) return;
       setState(() => _countdown = count);
+      unawaited(
+        _voiceGuidance.announce(
+          TugInstructions.countdownWord(count),
+          force: true,
+        ),
+      );
       await Future<void>.delayed(const Duration(seconds: 1));
     }
     if (!mounted || _stateMachine.state != TugState.ready) return;
-    setState(() => _countdown = 0);
-    _pendingTestStart = true;
     try {
       await _sensorService.start();
+      if (!mounted || _stateMachine.state != TugState.ready) return;
+      setState(() => _countdown = 0);
+      _pendingTestStart = true;
+      unawaited(_voiceGuidance.announce(TugInstructions.start, force: true));
     } catch (error) {
       _invalidate(InvalidReason.sensorUnavailable);
     }
@@ -231,6 +283,14 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
       valid: true,
     );
     unawaited(_sensorService.stop());
+    unawaited(
+      _replaceVoicePrompt(
+        TugInstructions.result(
+          seconds: seconds,
+          overThreshold: _result!.riskStatus == AssessmentStatus.risk,
+        ),
+      ),
+    );
     setState(() {});
   }
 
@@ -239,7 +299,13 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
     _invalidReason = reason;
     _stateMachine.transitionTo(TugState.invalid);
     unawaited(_sensorService.stop());
+    unawaited(_replaceVoicePrompt('หยุดการทดสอบ $_invalidMessage'));
     if (mounted) setState(() {});
+  }
+
+  Future<void> _replaceVoicePrompt(String message) async {
+    await _voiceGuidance.stop();
+    await _voiceGuidance.announce(message, force: true);
   }
 
   Future<void> _save() async {
@@ -277,6 +343,50 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
     );
   }
 
+  void _toggleVoice() {
+    final enabled = !_voiceEnabled;
+    setState(() => _voiceEnabled = enabled);
+    unawaited(_voiceGuidance.setEnabled(enabled));
+    if (enabled) {
+      unawaited(_voiceGuidance.announce(_currentVoicePrompt, force: true));
+    }
+  }
+
+  String get _currentVoicePrompt {
+    final state = _stateMachine.state;
+    if (state == TugState.completed && _result != null) {
+      return TugInstructions.result(
+        seconds: _result!.totalSeconds,
+        overThreshold: _result!.riskStatus == AssessmentStatus.risk,
+      );
+    }
+    if (state == TugState.invalid) return _invalidMessage;
+    if (state == TugState.idle) {
+      return _availability?.ready == true
+          ? TugInstructions.sensorReady
+          : 'กำลังตรวจสอบเซนเซอร์';
+    }
+    if (state == TugState.calibrating) return TugInstructions.calibration;
+    if (state == TugState.ready) {
+      final countdown = _countdown;
+      return countdown == null
+          ? TugInstructions.calibrated
+          : countdown == 0
+          ? TugInstructions.start
+          : TugInstructions.countdownWord(countdown);
+    }
+    return TugInstructions.promptForState(state) ??
+        'กำลังวิเคราะห์การเคลื่อนไหว';
+  }
+
+  Widget _voiceButton() => IconButton(
+    onPressed: _toggleVoice,
+    tooltip: _voiceEnabled ? 'ปิดเสียงคำแนะนำ' : 'เปิดเสียงคำแนะนำ',
+    icon: Icon(
+      _voiceEnabled ? Icons.volume_up_outlined : Icons.volume_off_outlined,
+    ),
+  );
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) return;
@@ -294,6 +404,7 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
     unawaited(_sampleSubscription?.cancel());
     unawaited(_errorSubscription?.cancel());
     unawaited(_sensorService.dispose());
+    unawaited(_voiceGuidance.dispose());
     super.dispose();
   }
 
@@ -325,7 +436,10 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
   };
 
   Widget _buildSensorSetup() => Scaffold(
-    appBar: AppBar(title: const Text('ทดสอบลุก–เดิน–นั่ง')),
+    appBar: AppBar(
+      title: const Text('ทดสอบลุก–เดิน–นั่ง'),
+      actions: [_voiceButton()],
+    ),
     body: AppScaffoldBody(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -360,6 +474,11 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
             label: 'ใช้เก้าอี้มั่นคงและมีผู้ดูแลใกล้ ๆ',
             icon: Icons.health_and_safety_outlined,
           ),
+          const PreparationItem(
+            label:
+                'กดปรับเทียบครั้งเดียว แล้วฟังเสียงสั่งเริ่มโดยไม่ต้องแตะจออีก',
+            icon: Icons.record_voice_over_outlined,
+          ),
           if (_setupError != null) ...[
             const SizedBox(height: 12),
             StatusBanner(
@@ -371,7 +490,7 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
           const SizedBox(height: 22),
           FilledButton(
             onPressed: _availability?.ready == true ? _startCalibration : null,
-            child: const Text('ปรับเทียบขณะนั่งนิ่ง'),
+            child: const Text('เริ่มปรับเทียบและทดสอบ'),
           ),
           if (!_probing && !(_availability?.ready ?? false)) ...[
             const SizedBox(height: 12),
@@ -386,7 +505,10 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
   );
 
   Widget _buildCalibration() => Scaffold(
-    appBar: AppBar(title: const Text('ทดสอบลุก–เดิน–นั่ง')),
+    appBar: AppBar(
+      title: const Text('ทดสอบลุก–เดิน–นั่ง'),
+      actions: [_voiceButton()],
+    ),
     body: AppScaffoldBody(
       child: Column(
         children: [
@@ -421,7 +543,10 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
   );
 
   Widget _buildReady() => Scaffold(
-    appBar: AppBar(title: const Text('ทดสอบลุก–เดิน–นั่ง')),
+    appBar: AppBar(
+      title: const Text('ทดสอบลุก–เดิน–นั่ง'),
+      actions: [_voiceButton()],
+    ),
     body: AppScaffoldBody(
       child: Column(
         children: [
@@ -435,13 +560,19 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
           if (_countdown == null) ...[
             const StatusBanner(
               status: AssessmentStatus.normal,
-              label: 'เซนเซอร์พร้อม',
-              detail: 'นั่งชิดพนักเก้าอี้ เมื่อกดเริ่มให้รอสัญญาณนับถอยหลัง',
+              label: 'เซนเซอร์พร้อม · เริ่มอัตโนมัติ',
+              detail: TugInstructions.automaticStartDetail,
             ),
             const SizedBox(height: 28),
-            FilledButton(
-              onPressed: _countdownAndStart,
-              child: const Text('เริ่มนับถอยหลัง'),
+            const SizedBox(
+              width: 42,
+              height: 42,
+              child: CircularProgressIndicator(strokeWidth: 4),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'ฟังคำอธิบายและคงท่านั่งไว้',
+              textAlign: TextAlign.center,
             ),
           ] else ...[
             Text(
@@ -468,6 +599,7 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
       appBar: AppBar(
         title: const Text('ทดสอบลุก–เดิน–นั่ง'),
         automaticallyImplyLeading: false,
+        actions: [_voiceButton()],
       ),
       body: SafeArea(
         child: Padding(
@@ -553,7 +685,10 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
       ('นั่งลง', result.sitDuration),
     ];
     return Scaffold(
-      appBar: AppBar(title: const Text('ผล Timed Up and Go')),
+      appBar: AppBar(
+        title: const Text('ผล Timed Up and Go'),
+        actions: [_voiceButton()],
+      ),
       body: AppScaffoldBody(
         child: Column(
           children: [

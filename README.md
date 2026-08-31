@@ -190,6 +190,7 @@ idle → calibrating → ready → sitting → standingUp → walkingOut
 - Turn ใช้ angular velocity รอบแกน gravity และ integration ตามเวลา ก่อนเปลี่ยนเป็น walking back
 - Sit-down ต้องพบ motion transition หลัง return phase แล้วตามด้วย quiet window และ gravity magnitude ที่สมเหตุสมผล
 - Timer เริ่มหลัง countdown ที่ sensor sample แรกและหยุดอัตโนมัติเมื่อ state `completed`; ใช้ `Stopwatch`/event elapsed duration ไม่ใช้ UI frames
+- หลังผู้ใช้กดปรับเทียบครั้งเดียว ระบบพูดขั้นตอน TUG ภาษาไทย รอช่วงอธิบาย นับถอยหลัง 3–2–1 และเริ่ม sensor stream อัตโนมัติ จากนั้นประกาศเมื่อพบการลุก เดินออก หมุน เดินกลับ นั่งลง ผลรวม และเหตุที่ต้องหยุด โดยมีปุ่มเปิด–ปิดเสียงทุกหน้า
 - มี timeout 60 วินาทีและปุ่มยกเลิกฉุกเฉิน ทั้งสองกรณีไม่สร้างผลปกติ
 - Classification: `> 13.5 seconds = risk`, `<= 13.5 seconds = normal`
 - Phase durations จะแสดงและบันทึกเฉพาะเมื่อ confidence ถึงเกณฑ์ หากไม่ถึงจะแสดงเฉพาะ total time โดยไม่สร้างค่า phase ปลอม
