@@ -5,6 +5,7 @@ import 'package:balance_detect/core/domain/assessment_enums.dart';
 import 'package:balance_detect/core/errors/user_facing_exception.dart';
 import 'package:balance_detect/core/logging/app_logger.dart';
 import 'package:balance_detect/core/providers/app_providers.dart';
+import 'package:balance_detect/core/services/screen_awake_service.dart';
 import 'package:balance_detect/core/services/voice_guidance_service.dart';
 import 'package:balance_detect/core/theme/app_theme.dart';
 import 'package:balance_detect/core/utils/id_generator.dart';
@@ -57,6 +58,7 @@ class _FullertonAssessmentScreenState
   int _lostFrames = 0;
   int _processingErrors = 0;
   double _baselineProgress = 0;
+  final _screenAwake = ScreenAwakeService.instance.createLease();
   final _voiceGuidance = VoiceGuidanceService();
   Timer? _positioningCountdownTimer;
   Timer? _readyCountdownTimer;
@@ -68,6 +70,7 @@ class _FullertonAssessmentScreenState
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    unawaited(_screenAwake.acquire());
     _cameraService = MlKitCameraPoseService();
     _stateMachine.transitionTo(FullertonState.positioning);
     unawaited(_voiceGuidance.initialize());
@@ -88,6 +91,7 @@ class _FullertonAssessmentScreenState
       if (_stateMachine.canTransitionTo(FullertonState.error)) {
         _stateMachine.transitionTo(FullertonState.error);
       }
+      unawaited(_screenAwake.release());
       if (mounted) setState(() {});
     }
   }
@@ -98,6 +102,7 @@ class _FullertonAssessmentScreenState
     _initializationError = error;
     if (_stateMachine.canTransitionTo(FullertonState.error)) {
       _stateMachine.transitionTo(FullertonState.error);
+      unawaited(_screenAwake.release());
       if (mounted) setState(() {});
     }
   }
@@ -317,6 +322,7 @@ class _FullertonAssessmentScreenState
       valid: true,
     );
     _stateMachine.transitionTo(FullertonState.completed);
+    unawaited(_screenAwake.release());
     unawaited(_cameraService.dispose());
     setState(() {});
   }
@@ -327,6 +333,7 @@ class _FullertonAssessmentScreenState
     _cancelReadyCountdown();
     _invalidReason = reason;
     _stateMachine.transitionTo(FullertonState.invalid);
+    unawaited(_screenAwake.release());
     unawaited(_cameraService.dispose());
     if (mounted) setState(() {});
   }
@@ -404,6 +411,7 @@ class _FullertonAssessmentScreenState
     unawaited(_cameraService.dispose());
     _positioningCountdownTimer?.cancel();
     _readyCountdownTimer?.cancel();
+    unawaited(_screenAwake.release());
     unawaited(_voiceGuidance.dispose());
     super.dispose();
   }

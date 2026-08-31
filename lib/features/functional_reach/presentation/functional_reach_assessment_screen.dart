@@ -5,6 +5,7 @@ import 'package:balance_detect/core/domain/assessment_enums.dart';
 import 'package:balance_detect/core/errors/user_facing_exception.dart';
 import 'package:balance_detect/core/logging/app_logger.dart';
 import 'package:balance_detect/core/providers/app_providers.dart';
+import 'package:balance_detect/core/services/screen_awake_service.dart';
 import 'package:balance_detect/core/services/voice_guidance_service.dart';
 import 'package:balance_detect/core/utils/id_generator.dart';
 import 'package:balance_detect/core/utils/unit_conversion.dart';
@@ -80,6 +81,7 @@ class _FunctionalReachAssessmentScreenState
   double _heightCalibrationProgress = 0;
   String _heightCalibrationMessage = 'อยู่นิ่ง ให้เห็นหัวไหล่และเท้าครบ';
   bool _poseAcquiredLogged = false;
+  final _screenAwake = ScreenAwakeService.instance.createLease();
   final _voiceGuidance = VoiceGuidanceService();
   Timer? _positioningCountdownTimer;
   Timer? _readyCountdownTimer;
@@ -92,6 +94,7 @@ class _FunctionalReachAssessmentScreenState
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    unawaited(_screenAwake.acquire());
     _cameraService = MlKitCameraPoseService();
     _stateMachine.transitionTo(FunctionalReachState.positioning);
     unawaited(_voiceGuidance.initialize());
@@ -118,6 +121,7 @@ class _FunctionalReachAssessmentScreenState
       if (_stateMachine.canTransitionTo(FunctionalReachState.error)) {
         _stateMachine.transitionTo(FunctionalReachState.error);
       }
+      unawaited(_screenAwake.release());
       if (mounted) setState(() => _initializationError = error);
     }
   }
@@ -127,6 +131,7 @@ class _FunctionalReachAssessmentScreenState
     if (_processingErrors < 5) return;
     if (_stateMachine.canTransitionTo(FunctionalReachState.error)) {
       _stateMachine.transitionTo(FunctionalReachState.error);
+      unawaited(_screenAwake.release());
       if (mounted) setState(() => _initializationError = error);
     }
   }
@@ -521,6 +526,7 @@ class _FunctionalReachAssessmentScreenState
       valid: true,
     );
     _stateMachine.transitionTo(FunctionalReachState.completed);
+    unawaited(_screenAwake.release());
     unawaited(_cameraService.dispose());
     AppLogger.event('reach_peak', <String, Object?>{
       'distanceCm': snapshot.maximumDistanceCm,
@@ -536,6 +542,7 @@ class _FunctionalReachAssessmentScreenState
     _cancelReadyCountdown();
     _invalidReason = reason;
     _stateMachine.transitionTo(FunctionalReachState.invalid);
+    unawaited(_screenAwake.release());
     unawaited(_cameraService.dispose());
     AppLogger.event('reach_invalidated', <String, Object?>{
       'reason': reason.name,
@@ -643,6 +650,7 @@ class _FunctionalReachAssessmentScreenState
     unawaited(_cameraService.dispose());
     _positioningCountdownTimer?.cancel();
     _readyCountdownTimer?.cancel();
+    unawaited(_screenAwake.release());
     unawaited(_voiceGuidance.dispose());
     super.dispose();
   }

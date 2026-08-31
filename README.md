@@ -109,6 +109,7 @@ Android manifest ประกาศ `CAMERA` permission และระบุ ca
 - Camera ถูกขอเมื่อเริ่ม camera assessment หาก deny จะแสดงเหตุผลและปุ่มลองใหม่
 - หาก deny แบบถาวร จะแสดงปุ่มเปิด app settings
 - Accelerometer/gyroscope บน Android ไม่ต้อง runtime permission แต่ระบบ probe stream จริงก่อนเริ่ม TUG
+- หน้าจอจะไม่ดับตั้งแต่เข้าหน้าทดสอบจริง ระหว่างจัดตำแหน่ง ปรับเทียบ นับถอยหลัง และวัดผลของทั้ง 3 แบบ จากนั้นคืนค่าปกติเมื่อเสร็จสิ้น ผลเป็น invalid/error หรือออกจากหน้า
 - ทุก camera/sensor subscription, image stream และ native pose detector ถูกหยุด/ปิดเมื่อจบ ออกจากหน้า เกิด error หรือ app ถูกพัก
 - หาก app pause, screen lock หรือ interruption เกิดระหว่าง assessment ระบบ mark attempt เป็น invalid และไม่ทำต่อเงียบ ๆ
 

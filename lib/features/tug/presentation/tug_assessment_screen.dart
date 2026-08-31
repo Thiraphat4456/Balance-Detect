@@ -4,6 +4,7 @@ import 'package:balance_detect/core/constants/assessment_config.dart';
 import 'package:balance_detect/core/domain/assessment_enums.dart';
 import 'package:balance_detect/core/logging/app_logger.dart';
 import 'package:balance_detect/core/providers/app_providers.dart';
+import 'package:balance_detect/core/services/screen_awake_service.dart';
 import 'package:balance_detect/core/services/voice_guidance_service.dart';
 import 'package:balance_detect/core/theme/app_theme.dart';
 import 'package:balance_detect/core/utils/id_generator.dart';
@@ -39,6 +40,7 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
   final _stateMachine = TugStateMachine();
   final _sensorService = SensorsPlusService();
   final _calibrationService = const SensorCalibrationService();
+  final _screenAwake = ScreenAwakeService.instance.createLease();
   final _voiceGuidance = VoiceGuidanceService();
   final List<SensorSample> _calibrationSamples = <SensorSample>[];
   StreamSubscription<SensorSample>? _sampleSubscription;
@@ -67,6 +69,7 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    unawaited(_screenAwake.acquire());
     unawaited(_voiceGuidance.initialize());
     _sampleSubscription = _sensorService.samples.listen(_onSample);
     _errorSubscription = _sensorService.errors.listen((error) {
@@ -283,6 +286,7 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
       valid: true,
     );
     unawaited(_sensorService.stop());
+    unawaited(_screenAwake.release());
     unawaited(
       _replaceVoicePrompt(
         TugInstructions.result(
@@ -299,6 +303,7 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
     _invalidReason = reason;
     _stateMachine.transitionTo(TugState.invalid);
     unawaited(_sensorService.stop());
+    unawaited(_screenAwake.release());
     unawaited(_replaceVoicePrompt('หยุดการทดสอบ $_invalidMessage'));
     if (mounted) setState(() {});
   }
@@ -404,6 +409,7 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
     unawaited(_sampleSubscription?.cancel());
     unawaited(_errorSubscription?.cancel());
     unawaited(_sensorService.dispose());
+    unawaited(_screenAwake.release());
     unawaited(_voiceGuidance.dispose());
     super.dispose();
   }
