@@ -51,6 +51,7 @@ class TugAnalysisSnapshot {
     required this.state,
     required this.elapsed,
     required this.dynamicAcceleration,
+    required this.gravityMagnitudeDeviation,
     required this.angularVelocity,
     required this.confidence,
     this.timeline,
@@ -59,6 +60,7 @@ class TugAnalysisSnapshot {
   final TugState state;
   final Duration elapsed;
   final double dynamicAcceleration;
+  final double gravityMagnitudeDeviation;
   final double angularVelocity;
   final double confidence;
   final TugTimeline? timeline;
@@ -105,6 +107,17 @@ class TugMotionAnalyzer {
     );
     final meanAngularVelocity = _mean(
       _window.map((value) => value.angularVelocityMagnitude),
+    );
+    final gravityMagnitude = _mean(
+      _window.map((value) => value.rawAcceleration.magnitude),
+    );
+    final meanGravityMagnitudeDeviation = _mean(
+      _window.map(
+        (value) =>
+            (value.rawAcceleration.magnitude -
+                    calibration.gravityVector.magnitude)
+                .abs(),
+      ),
     );
 
     switch (stateMachine.state) {
@@ -191,20 +204,17 @@ class TugMotionAnalyzer {
           _window.clear();
         }
       case TugState.sittingDown:
-        final gravityMagnitude = _mean(
-          _window.map((value) => value.rawAcceleration.magnitude),
-        );
         if (_windowSpan >= AssessmentConfig.tugQuietWindow &&
-            meanAcceleration <=
-                AssessmentConfig.tugSittingDynamicAcceleration &&
+            meanGravityMagnitudeDeviation <=
+                AssessmentConfig.tugSittingGravityMagnitudeTolerance &&
             meanAngularVelocity <= AssessmentConfig.tugSittingAngularVelocity &&
             gravityMagnitude >= 7 &&
             gravityMagnitude <= 12.5) {
           _sitDetected = sample.elapsed;
           _eventConfidence.add(
             (1 -
-                    meanAcceleration /
-                        AssessmentConfig.tugSittingDynamicAcceleration)
+                    meanGravityMagnitudeDeviation /
+                        AssessmentConfig.tugSittingGravityMagnitudeTolerance)
                 .clamp(0.0, 1.0),
           );
           stateMachine.transitionTo(TugState.completed);
@@ -218,12 +228,18 @@ class TugMotionAnalyzer {
         break;
     }
     _lastSampleElapsed = sample.elapsed;
-    return _snapshot(sample, meanAcceleration, meanAngularVelocity);
+    return _snapshot(
+      sample,
+      meanAcceleration,
+      meanGravityMagnitudeDeviation,
+      meanAngularVelocity,
+    );
   }
 
   TugAnalysisSnapshot _snapshot(
     CalibratedSensorSample sample,
     double acceleration,
+    double gravityMagnitudeDeviation,
     double angularVelocity,
   ) {
     final confidence = _eventConfidence.isEmpty
@@ -236,6 +252,7 @@ class TugMotionAnalyzer {
       state: stateMachine.state,
       elapsed: sample.elapsed,
       dynamicAcceleration: acceleration,
+      gravityMagnitudeDeviation: gravityMagnitudeDeviation,
       angularVelocity: angularVelocity,
       confidence: confidence,
       timeline: stateMachine.state == TugState.completed

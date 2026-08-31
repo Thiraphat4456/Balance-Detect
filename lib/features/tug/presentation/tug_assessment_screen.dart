@@ -668,6 +668,7 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
         'acc ${raw == null ? '-' : '${raw.accelerometer.x.toStringAsFixed(2)}, ${raw.accelerometer.y.toStringAsFixed(2)}, ${raw.accelerometer.z.toStringAsFixed(2)}'}\n'
         'gyro ${raw == null ? '-' : '${raw.gyroscope.x.toStringAsFixed(2)}, ${raw.gyroscope.y.toStringAsFixed(2)}, ${raw.gyroscope.z.toStringAsFixed(2)}'}\n'
         'dynamic ${_analysis?.dynamicAcceleration.toStringAsFixed(2) ?? '-'} '
+        'rest ${_analysis?.gravityMagnitudeDeviation.toStringAsFixed(2) ?? '-'} '
         'angular ${_analysis?.angularVelocity.toStringAsFixed(2) ?? '-'}',
         style: const TextStyle(color: Colors.white, fontSize: 12),
       ),

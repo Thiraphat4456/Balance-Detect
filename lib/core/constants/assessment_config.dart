@@ -77,7 +77,10 @@ abstract final class AssessmentConfig {
   static const tugWalkingDynamicAcceleration = 0.30;
   static const tugTurnAngularVelocity = 0.55;
   static const tugTurnMinimumRadians = 2.10;
-  static const tugSittingDynamicAcceleration = 0.24;
+  // At the seated endpoint the phone may rest at a different angle than it
+  // had during calibration. Compare acceleration magnitudes instead of
+  // gravity vectors so a static orientation change is not treated as motion.
+  static const tugSittingGravityMagnitudeTolerance = 0.35;
   static const tugSittingAngularVelocity = 0.14;
   static const tugPhaseConfidence = 0.60;
 }
