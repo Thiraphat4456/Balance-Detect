@@ -7,6 +7,8 @@ enum BodyLandmark {
   rightElbow,
   leftWrist,
   rightWrist,
+  leftIndex,
+  rightIndex,
   leftHip,
   rightHip,
   leftKnee,
@@ -80,6 +82,9 @@ extension PrimaryBodySideLandmarks on PrimaryBodySide {
   BodyLandmark get wrist => this == PrimaryBodySide.left
       ? BodyLandmark.leftWrist
       : BodyLandmark.rightWrist;
+  BodyLandmark get indexFinger => this == PrimaryBodySide.left
+      ? BodyLandmark.leftIndex
+      : BodyLandmark.rightIndex;
   BodyLandmark get hip => this == PrimaryBodySide.left
       ? BodyLandmark.leftHip
       : BodyLandmark.rightHip;

@@ -5,6 +5,7 @@ import 'package:balance_detect/core/widgets/app_scaffold_body.dart';
 import 'package:balance_detect/core/widgets/loading_view.dart';
 import 'package:balance_detect/core/widgets/status_banner.dart';
 import 'package:balance_detect/features/assessment/domain/assessment_session.dart';
+import 'package:balance_detect/features/fullerton/domain/fullerton_reach_calibration_service.dart';
 import 'package:balance_detect/features/fullerton/domain/fullerton_result.dart';
 import 'package:balance_detect/features/functional_reach/domain/functional_reach_result.dart';
 import 'package:balance_detect/features/tug/domain/tug_result.dart';
@@ -43,7 +44,14 @@ class AssessmentSummaryScreen extends ConsumerWidget {
         final risk = tug?.riskStatus == AssessmentStatus.risk;
         final warning =
             reach?.status == AssessmentStatus.warning ||
-            (fullerton != null && fullerton.score <= 2);
+            (fullerton != null &&
+                (!fullerton.protocolVariant.isStandard ||
+                    fullerton.score <= 2));
+        final experimentalOnlyWarning =
+            !risk &&
+            reach?.status != AssessmentStatus.warning &&
+            fullerton != null &&
+            !fullerton.protocolVariant.isStandard;
         final overallStatus = !hasResults
             ? AssessmentStatus.invalid
             : risk
@@ -74,13 +82,19 @@ class AssessmentSummaryScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 14),
               _SummaryCard(
-                title: 'Fullerton',
+                title: fullerton == null || fullerton.protocolVariant.isStandard
+                    ? 'Fullerton'
+                    : fullerton.protocolVariant.isExperimental
+                    ? 'Modified Fullerton — ทดลอง'
+                    : 'Fullerton — โปรโตคอลเดิม',
                 value: fullerton == null
                     ? 'ยังไม่มีผล'
                     : '${fullerton.score} / 4 คะแนน',
                 detail: fullerton == null
                     ? 'ทำแบบทดสอบเพื่อเพิ่มข้อมูล'
-                    : 'ตรวจพบ ${fullerton.stepCount} ก้าว',
+                    : 'ตรวจพบ ${fullerton.stepCount} ก้าว'
+                          '${fullerton.targetDistanceCm == null ? '' : ' · เป้าหมาย ${fullerton.targetDistanceCm!.toStringAsFixed(1)} ซม.'}'
+                          '${fullerton.protocolVariant.isStandard ? '' : ' · ไม่เทียบเกณฑ์มาตรฐาน'}',
               ),
               const SizedBox(height: 14),
               _SummaryCard(
@@ -100,11 +114,15 @@ class AssessmentSummaryScreen extends ConsumerWidget {
                 status: overallStatus,
                 label: !hasResults
                     ? 'ข้อมูลยังไม่เพียงพอ'
+                    : experimentalOnlyWarning
+                    ? 'มีผล Fullerton แบบทดลอง'
                     : overallStatus == AssessmentStatus.normal
                     ? 'ผลล่าสุดอยู่ในเกณฑ์เบื้องต้น'
                     : 'พบสัญญาณความเสี่ยงด้านการทรงตัว',
                 detail: !hasResults
                     ? 'ยังไม่มีผลที่ใช้ได้สำหรับสรุป'
+                    : experimentalOnlyWarning
+                    ? 'ผล Modified FAB ถูกแยกจากการตีความตามเกณฑ์มาตรฐาน'
                     : overallStatus == AssessmentStatus.normal
                     ? 'ผลจากแอปเป็นการคัดกรอง ไม่ใช่การวินิจฉัย'
                     : 'ควรได้รับการประเมินเพิ่มเติมจากผู้เชี่ยวชาญ',

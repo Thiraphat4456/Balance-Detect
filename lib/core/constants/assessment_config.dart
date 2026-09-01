@@ -59,6 +59,15 @@ abstract final class AssessmentConfig {
   static const stepMinimumResultConfidence = 0.45;
   static const fullertonBaselineDuration = Duration(seconds: 2);
   static const fullertonBaselineMinFrames = 10;
+  static const fullertonFootBaselineMaxJitterNormalized = 0.018;
+  static const fullertonArmCalibrationDuration = Duration(seconds: 2);
+  static const fullertonArmCalibrationMinFrames = 12;
+  static const fullertonArmMaxFingertipJitterNormalized = 0.020;
+  static const fullertonTargetSafeMarginNormalized = 0.025;
+  static const fullertonTargetHitRadiusCm = 4.0;
+  static const fullertonReturnRadiusCm = 5.0;
+  static const fullertonTargetConfirmationFrames = 3;
+  static const fullertonStepPermissionDelay = Duration(milliseconds: 2500);
 
   static const sensorSamplingPeriod = Duration(milliseconds: 20);
   static const sensorProbeTimeout = Duration(seconds: 2);

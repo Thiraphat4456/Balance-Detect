@@ -6,6 +6,7 @@ import 'package:balance_detect/core/widgets/app_scaffold_body.dart';
 import 'package:balance_detect/core/widgets/loading_view.dart';
 import 'package:balance_detect/features/assessment/domain/assessment_session.dart';
 import 'package:balance_detect/features/assessment/domain/session_summary.dart';
+import 'package:balance_detect/features/fullerton/domain/fullerton_reach_calibration_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -146,7 +147,11 @@ class _HistoryCard extends StatelessWidget {
                 ),
               if (session.fullerton != null)
                 _ValueRow(
-                  label: 'Fullerton',
+                  label: session.fullerton!.protocolVariant.isStandard
+                      ? 'Fullerton'
+                      : session.fullerton!.protocolVariant.isExperimental
+                      ? 'Modified FAB'
+                      : 'Fullerton (เดิม)',
                   value: '${session.fullerton!.score} / 4',
                 ),
               if (session.tug != null)

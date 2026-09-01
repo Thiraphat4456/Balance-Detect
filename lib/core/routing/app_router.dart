@@ -2,6 +2,7 @@ import 'package:balance_detect/core/theme/app_theme.dart';
 import 'package:balance_detect/features/assessment_summary/presentation/assessment_summary_screen.dart';
 import 'package:balance_detect/features/fullerton/presentation/fullerton_assessment_screen.dart';
 import 'package:balance_detect/features/fullerton/presentation/fullerton_intro_screen.dart';
+import 'package:balance_detect/features/fullerton/domain/fullerton_reach_calibration_service.dart';
 import 'package:balance_detect/features/functional_reach/presentation/functional_reach_assessment_screen.dart';
 import 'package:balance_detect/features/functional_reach/presentation/functional_reach_intro_screen.dart';
 import 'package:balance_detect/features/history/presentation/history_detail_screen.dart';
@@ -62,7 +63,9 @@ final appRouter = GoRouter(
                     state.uri.queryParameters['height']?.trim() ?? '',
                   );
             if (height == null) {
-              return const _MissingHeightScreen();
+              return const _MissingHeightScreen(
+                returnPath: '/functional-reach',
+              );
             }
             return FunctionalReachAssessmentScreen(heightCm: height);
           },
@@ -75,7 +78,24 @@ final appRouter = GoRouter(
       routes: <RouteBase>[
         GoRoute(
           path: 'test',
-          builder: (context, state) => const FullertonAssessmentScreen(),
+          builder: (context, state) {
+            final extraHeight = state.extra;
+            final height = extraHeight is num
+                ? extraHeight.toDouble()
+                : double.tryParse(
+                    state.uri.queryParameters['height']?.trim() ?? '',
+                  );
+            if (height == null) {
+              return const _MissingHeightScreen(returnPath: '/fullerton');
+            }
+            final protocol = FullertonProtocolVariantDetails.fromQuery(
+              state.uri.queryParameters['protocol'],
+            );
+            return FullertonAssessmentScreen(
+              heightCm: height,
+              protocolVariant: protocol,
+            );
+          },
         ),
       ],
     ),
@@ -151,7 +171,9 @@ class _MainNavigationScaffold extends StatelessWidget {
 }
 
 class _MissingHeightScreen extends StatelessWidget {
-  const _MissingHeightScreen();
+  const _MissingHeightScreen({required this.returnPath});
+
+  final String returnPath;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -170,7 +192,7 @@ class _MissingHeightScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             FilledButton(
-              onPressed: () => context.go('/functional-reach'),
+              onPressed: () => context.go(returnPath),
               child: const Text('กลับไปกรอกส่วนสูง'),
             ),
           ],

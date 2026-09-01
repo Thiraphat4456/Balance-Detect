@@ -10,7 +10,7 @@ class AppDatabase {
     final databaseDirectory = await getDatabasesPath();
     return openDatabase(
       path.join(databaseDirectory, 'balance_detect.db'),
-      version: 1,
+      version: 2,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
       },
@@ -74,6 +74,9 @@ class AppDatabase {
             supervision_required INTEGER,
             confidence REAL NOT NULL,
             valid INTEGER NOT NULL,
+            protocol_variant TEXT NOT NULL,
+            target_distance_cm REAL,
+            height_cm REAL,
             invalid_reason TEXT,
             FOREIGN KEY(session_id) REFERENCES assessment_sessions(id) ON DELETE CASCADE
           )
@@ -102,6 +105,19 @@ class AppDatabase {
           'ON assessment_sessions(timestamp_ms DESC)',
         );
         await batch.commit(noResult: true);
+      },
+      onUpgrade: (database, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await database.execute(
+            "ALTER TABLE fullerton_results ADD COLUMN protocol_variant TEXT NOT NULL DEFAULT 'legacyUnspecified'",
+          );
+          await database.execute(
+            'ALTER TABLE fullerton_results ADD COLUMN target_distance_cm REAL',
+          );
+          await database.execute(
+            'ALTER TABLE fullerton_results ADD COLUMN height_cm REAL',
+          );
+        }
       },
     );
   }

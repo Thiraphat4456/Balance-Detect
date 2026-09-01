@@ -146,10 +146,7 @@ class MlKitCameraPoseService implements CameraPoseService {
               imageAspectRatio:
                   converted.orientedWidth / converted.orientedHeight,
             )
-          : _toPoseFrame(
-              poses.first,
-              converted,
-            );
+          : _toPoseFrame(poses.first, converted);
       final frame = _frameSmoother.smooth(detectedFrame);
       if (!_disposed) _frameController.add(frame);
       _processedFrameCount += 1;
@@ -245,8 +242,7 @@ class MlKitCameraPoseService implements CameraPoseService {
         imageWidth: converted.imageWidth,
         imageHeight: converted.imageHeight,
         rotation: converted.rotation,
-        lensDirection:
-            _camera?.lensDirection ?? CameraLensDirection.back,
+        lensDirection: _camera?.lensDirection ?? CameraLensDirection.back,
       );
       mapped[entry.value] = NormalizedPoint(
         x: coordinates.x,
@@ -268,6 +264,8 @@ class MlKitCameraPoseService implements CameraPoseService {
     PoseLandmarkType.rightElbow: BodyLandmark.rightElbow,
     PoseLandmarkType.leftWrist: BodyLandmark.leftWrist,
     PoseLandmarkType.rightWrist: BodyLandmark.rightWrist,
+    PoseLandmarkType.leftIndex: BodyLandmark.leftIndex,
+    PoseLandmarkType.rightIndex: BodyLandmark.rightIndex,
     PoseLandmarkType.leftHip: BodyLandmark.leftHip,
     PoseLandmarkType.rightHip: BodyLandmark.rightHip,
     PoseLandmarkType.leftKnee: BodyLandmark.leftKnee,

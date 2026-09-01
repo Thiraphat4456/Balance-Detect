@@ -45,8 +45,10 @@ class PoseSkeletonPainter extends CustomPainter {
     _PoseBone(BodyLandmark.leftShoulder, BodyLandmark.rightShoulder),
     _PoseBone(BodyLandmark.leftShoulder, BodyLandmark.leftElbow),
     _PoseBone(BodyLandmark.leftElbow, BodyLandmark.leftWrist),
+    _PoseBone(BodyLandmark.leftWrist, BodyLandmark.leftIndex),
     _PoseBone(BodyLandmark.rightShoulder, BodyLandmark.rightElbow),
     _PoseBone(BodyLandmark.rightElbow, BodyLandmark.rightWrist),
+    _PoseBone(BodyLandmark.rightWrist, BodyLandmark.rightIndex),
     _PoseBone(BodyLandmark.leftShoulder, BodyLandmark.leftHip),
     _PoseBone(BodyLandmark.rightShoulder, BodyLandmark.rightHip),
     _PoseBone(BodyLandmark.leftHip, BodyLandmark.rightHip),
@@ -129,11 +131,13 @@ class PoseSkeletonPainter extends CustomPainter {
   /// belonging to the occluded arm.
   bool drawsLandmark(BodyLandmark landmark) {
     if (landmark == BodyLandmark.leftElbow ||
-        landmark == BodyLandmark.leftWrist) {
+        landmark == BodyLandmark.leftWrist ||
+        landmark == BodyLandmark.leftIndex) {
       return drawsArm(PrimaryBodySide.left);
     }
     if (landmark == BodyLandmark.rightElbow ||
-        landmark == BodyLandmark.rightWrist) {
+        landmark == BodyLandmark.rightWrist ||
+        landmark == BodyLandmark.rightIndex) {
       return drawsArm(PrimaryBodySide.right);
     }
     return true;
@@ -142,7 +146,8 @@ class PoseSkeletonPainter extends CustomPainter {
   PrimaryBodySide? _armSideForBone(_PoseBone bone) {
     for (final side in PrimaryBodySide.values) {
       if ((bone.start == side.shoulder && bone.end == side.elbow) ||
-          (bone.start == side.elbow && bone.end == side.wrist)) {
+          (bone.start == side.elbow && bone.end == side.wrist) ||
+          (bone.start == side.wrist && bone.end == side.indexFinger)) {
         return side;
       }
     }
@@ -154,7 +159,8 @@ class PoseSkeletonPainter extends CustomPainter {
     return side != null &&
         (landmark == side.shoulder ||
             landmark == side.elbow ||
-            landmark == side.wrist);
+            landmark == side.wrist ||
+            landmark == side.indexFinger);
   }
 
   Offset _toOffset(NormalizedPoint point, Size size) => Offset(

@@ -3,7 +3,7 @@
 Balance Detect เป็นแอป Flutter สำหรับประเมินการทรงตัวและคัดกรองความเสี่ยงต่อการล้มเบื้องต้นบน Android ผ่านแบบทดสอบ 3 แบบ:
 
 - Functional Reach Test — กล้อง + pose landmarks + anthropometric height calibration
-- Fullerton Advanced Balance Scale (MVP reach task) — กล้อง + temporal step detection
+- Fullerton Advanced Balance Scale (Item 2 prototype) — กล้อง + height/foot/fingertip calibration + fixed virtual target + temporal step detection
 - Timed Up and Go (TUG) — accelerometer + gyroscope + motion state machine
 
 แอปไม่สร้างผลจำลอง ผลที่บันทึกต้องมาจาก camera/sensor workflow จริง และผลที่ขาดความสมบูรณ์จะถูกหยุดพร้อมเหตุผลโดยไม่บันทึกเป็นผลสุขภาพปกติ
@@ -142,14 +142,23 @@ positioning → calibrating → baseline → ready → reaching → completed
 
 Explicit reference calibration ยังมี perspective/parallax error ได้ วัตถุอ้างอิงต้องอยู่ระนาบเดียวกับร่างกายและห้ามขยับกล้องหลัง calibration
 
-## Fullerton MVP Algorithm
+## Fullerton Item 2 Prototype Algorithm
 
-MVP ครอบคลุม reach task ตาม scoring ที่กำหนด ไม่ใช่ Fullerton scale ทุก item
+Prototype นี้ครอบคลุมเฉพาะท่า `Reach forward to retrieve an object` ไม่ใช่ Fullerton scale ครบ 10 ท่า และ virtual target เป็นตัวแทนการหยิบดินสอจริง จึงยังไม่ใช่วิธีบริหารแบบทดสอบที่ผ่าน clinical validation
 
-1. ตรวจ body/arm/feet landmarks และเก็บ foot baseline หลายเฟรม
-2. `StepDetectionService` ใช้ foot center จาก ankle + heel + foot index
-3. Threshold ปรับตาม foot length โดยมี minimum normalized displacement
-4. ต้องเคลื่อนต่อเนื่องหลายเฟรมจึงยืนยัน step และมี refractory/debounce period เพื่อไม่ให้นับ step เดียวซ้ำ
+1. รับส่วนสูง 100–230 ซม. แล้วบังคับมุมกล้องด้านข้าง ให้เห็นร่างกาย แขนข้างกล้อง ปลายนิ้ว และเท้าทั้งสองข้าง
+2. คาลิเบรตตำแหน่งเริ่มต้นของเท้าแต่ละข้างจาก ankle + heel + foot index หลายเฟรมจริง ไม่ใช้วงวางเท้าพิกัดตายตัว และปฏิเสธ baseline ที่ jitter สูง
+3. ใช้ shoulder-to-ankle span หลายเฟรมกับส่วนสูงที่กรอกเพื่อประมาณสเกลเซนติเมตรในภาพ
+4. ล็อกแขนข้างกล้องเพียงข้างเดียว ตรวจ hip–shoulder–elbow ใกล้ 90°, ข้อศอกเหยียด และใช้ ML Kit left/right index landmark เป็นปลายนิ้วโดยไม่แทนด้วย wrist แบบเงียบ ๆ
+5. เก็บปลายนิ้วหลายเฟรม เมื่อท่านิ่งจึงสร้างเป้าหมายเสมือนตามแนว shoulder→fingertip และตรึงพิกัดไว้ตลอดการเอื้อม ไม่ให้เป้าหมายตามมือ
+6. ระยะมาตรฐาน FAB คือ 10 นิ้ว (25.4 ซม.) จากปลายนิ้ว ส่วนโหมด 1 ฟุต (30.48 ซม.) ที่เพิ่มตามข้อกำหนดผู้ใช้ถูกแสดงชัดว่าเป็น Modified FAB และไม่ควรเทียบกับค่าอ้างอิงมาตรฐานโดยตรง
+7. เป้าหมายและการคำนวณระยะชดเชย image aspect ratio และใช้พิกัดหลัง front-camera mirror/rotation mapper ชุดเดียวกับ preview; หากเป้าหมายอยู่นอกภาพจะให้จัดตำแหน่งใหม่แทนการ clamp
+8. ระหว่างเอื้อม ระบบตรวจ target hit ต่อเนื่องหลายเฟรม จากนั้นสั่งให้กลับปลายนิ้วสู่จุดเริ่มและจบอัตโนมัติ โดยไม่ต้องแตะหน้าจอ
+9. หลัง 2.5 วินาทีแล้วยังไม่ถึงเป้าหมาย ระบบจึงพูดว่าอนุญาตให้ก้าวได้ตามลำดับคำสั่งในคู่มือ และ `StepDetectionService` จะนับเฉพาะการเลื่อนแนวนอนที่ foot anchor กับ ankle เคลื่อนสอดคล้องกันหลายเฟรม
+10. การยกส้นโดยไม่เลื่อนตำแหน่งเท้าไม่ถูกนับเป็นก้าว; threshold ปรับตาม foot length และมี refractory/debounce ป้องกันการนับก้าวซ้ำ
+11. Scoring: 0 steps + independent = 4, 0 steps + supervision = 3, 1 step = 2, 2 steps = 1, >2 steps = 0 โดยคำถาม supervision ยังต้องให้ผู้ประเมินตอบ เพราะ skeleton แยกคะแนน 3/4 อัตโนมัติไม่ได้
+
+คู่มืออ้างอิง: [FAB Test Administration Instructions (Revised September 2008)](https://geriatrictoolkit.missouri.edu/fab/FABScaleTestAdministrationInstructions.pdf) และ [FAB Scoring Form](https://geriatrictoolkit.missouri.edu/fab/FABScaleScoringFormwithCut-OffValues.pdf)
 5. เมื่อ `stepCount == 0` แอปถามผู้ประเมินเรื่อง supervision แทนให้กล้องตัดสิน
 6. หลังจัดตำแหน่งและหลังเก็บ baseline ระบบใช้เสียง + countdown เพื่อเริ่มขั้นถัดไปเอง ลดการต้องกดปุ่มขณะผู้ทดสอบอยู่ห่างจากโทรศัพท์
 
@@ -267,7 +276,8 @@ Automated tests ครอบคลุม:
 - Anthropometric height calibration ใน MVP ใช้ shoulder-to-ankle span และ fraction ที่กำหนดใน `AssessmentConfig` เป็น prior ไม่ใช่การวัดส่วนสูงโดยตรง จึงยังมี error จากสัดส่วนบุคคล มุมกล้อง การเอนตัว และการบัง landmark; ต้อง validate เทียบกับไม้บรรทัด, RGB-D หรือ motion-capture ก่อนใช้แทน explicit reference ในงานคลินิก
 - Functional Reach foot detector ตั้งใจยืนยันเฉพาะการเคลื่อนที่ที่ชัดและต่อเนื่องเพื่อทนต่อ ML Kit landmark jitter จึงต้องเก็บข้อมูลจริงเพื่อประเมินทั้ง false-positive และ false-negative ก่อนกำหนด threshold ทางคลินิก
 - เกณฑ์ท่าเริ่มต้น 75-105 องศาที่หัวไหล่และอย่างน้อย 150 องศาที่ข้อศอกเป็น tolerance สำหรับ computer vision ไม่ใช่ clinical cutoff ต้อง validate กับวิดีโอที่มีผู้เชี่ยวชาญกำกับก่อนใช้คัดกรองจริง รายละเอียดการทบทวน prior art อยู่ใน `docs/external-implementation-review.md`
-- Fullerton step detector เป็น temporal prototype และ MVP นี้ประเมิน reach task เดียว ไม่ใช่ Fullerton Advanced Balance Scale ฉบับเต็ม
+- Fullerton implementation เป็น calibrated 2D camera overlay ไม่ใช่ world-space AR: กล้อง RGB หน้าเพียงตัวเดียวและ anthropometric height prior ไม่สามารถรับรองระยะลึกจริง 25.4/30.48 ซม. ได้ ต้อง validate เทียบ ruler/marker หรือ motion capture และใช้ดินสอจริงหากต้องการทำตาม protocol มาตรฐาน
+- Fullerton step detector เป็น temporal prototype และประเมิน reach task เดียว ไม่ใช่ Fullerton Advanced Balance Scale ฉบับเต็ม; โหมด 1 ฟุตเป็น Modified FAB และคะแนนไม่ควรนำไปเทียบเกณฑ์มาตรฐานโดยไม่มี validation ใหม่
 - TUG motion detector ต้องเก็บ labeled sensor data จากผู้ใช้จริงหลายรูปร่าง รูปแบบการเดิน ตำแหน่งโทรศัพท์ และรุ่นอุปกรณ์ เพื่อ tune/validate sensitivity และ specificity
 - Automated tests ยืนยัน business rules และ deterministic algorithms แต่ไม่ทดแทน camera/sensor integration test บน physical phone
 - ก่อนใช้ทางคลินิกต้องทำ protocol validation, usability/safety review, data governance/privacy review และ regulatory assessment ที่เกี่ยวข้อง

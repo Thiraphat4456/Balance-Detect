@@ -1,4 +1,5 @@
 import 'package:balance_detect/core/domain/assessment_enums.dart';
+import 'package:balance_detect/features/fullerton/domain/fullerton_reach_calibration_service.dart';
 
 class FullertonResult {
   const FullertonResult({
@@ -10,6 +11,9 @@ class FullertonResult {
     required this.supervisionRequired,
     required this.confidence,
     required this.valid,
+    this.protocolVariant = FullertonProtocolVariant.legacyUnspecified,
+    this.targetDistanceCm,
+    this.heightCm,
     this.invalidReason,
   });
 
@@ -21,6 +25,9 @@ class FullertonResult {
   final bool? supervisionRequired;
   final double confidence;
   final bool valid;
+  final FullertonProtocolVariant protocolVariant;
+  final double? targetDistanceCm;
+  final double? heightCm;
   final InvalidReason? invalidReason;
 
   Map<String, Object?> toMap() => <String, Object?>{
@@ -36,6 +43,9 @@ class FullertonResult {
         : 0,
     'confidence': confidence,
     'valid': valid ? 1 : 0,
+    'protocol_variant': protocolVariant.name,
+    'target_distance_cm': targetDistanceCm,
+    'height_cm': heightCm,
     'invalid_reason': invalidReason?.name,
   };
 
@@ -50,6 +60,11 @@ class FullertonResult {
         : map['supervision_required'] == 1,
     confidence: (map['confidence']! as num).toDouble(),
     valid: map['valid'] == 1,
+    protocolVariant: FullertonProtocolVariantDetails.fromStored(
+      map['protocol_variant'] as String?,
+    ),
+    targetDistanceCm: (map['target_distance_cm'] as num?)?.toDouble(),
+    heightCm: (map['height_cm'] as num?)?.toDouble(),
     invalidReason: invalidReasonFromName(map['invalid_reason'] as String?),
   );
 }

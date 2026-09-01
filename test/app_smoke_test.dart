@@ -1,4 +1,5 @@
 import 'package:balance_detect/app/balance_detect_app.dart';
+import 'package:balance_detect/features/fullerton/presentation/fullerton_intro_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -44,4 +45,37 @@ void main() {
     expect(find.text('ความปลอดภัย'), findsOneWidget);
     expect(find.text('จัดตำแหน่งกล้อง'), findsOneWidget);
   });
+
+  testWidgets(
+    'Fullerton preparation requires height and labels one-foot mode',
+    (tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(const MaterialApp(home: FullertonIntroScreen()));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Fullerton Advanced Balance Scale — Item 2'),
+        findsOneWidget,
+      );
+      expect(find.text('ส่วนสูงผู้ทดสอบ'), findsOneWidget);
+      expect(find.text('ใช้ระยะ 1 ฟุตตามที่กำหนด'), findsOneWidget);
+      expect(find.textContaining('Modified FAB'), findsOneWidget);
+      expect(find.text('จัดตำแหน่งและคาลิเบรต'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), '99');
+      await tester.ensureVisible(find.text('จัดตำแหน่งและคาลิเบรต'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('จัดตำแหน่งและคาลิเบรต'));
+      await tester.pump();
+
+      expect(
+        find.text('กรุณากรอกส่วนสูง 100–230 ซม.'),
+        findsOneWidget,
+      );
+    },
+  );
 }

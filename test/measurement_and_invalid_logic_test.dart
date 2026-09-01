@@ -509,6 +509,71 @@ void main() {
     expect(detector.snapshot.stepCount, 1);
   });
 
+  test('Fullerton foot baseline exposes the calibrated foot positions', () {
+    final detector = StepDetectionService();
+    for (var index = 0; index < 10; index += 1) {
+      detector.addBaselineFrame(
+        _poseFrame(
+          timestamp: Duration(milliseconds: index * 100),
+          wristX: .4,
+          leftFootX: .3,
+          rightFootX: .6,
+        ),
+      );
+    }
+
+    expect(detector.finalizeBaseline(), isTrue);
+    expect(detector.baseline, isNotNull);
+    expect(detector.baseline!.left.center.x, closeTo(.3033, .001));
+    expect(detector.baseline!.right.center.x, closeTo(.6033, .001));
+  });
+
+  test('Fullerton rejects an unstable foot-position baseline', () {
+    final detector = StepDetectionService();
+    for (var index = 0; index < 10; index += 1) {
+      detector.addBaselineFrame(
+        _poseFrame(
+          timestamp: Duration(milliseconds: index * 100),
+          wristX: .4,
+          leftFootX: index.isEven ? .30 : .38,
+          rightFootX: .60,
+        ),
+      );
+    }
+
+    expect(detector.finalizeBaseline(), isFalse);
+    expect(detector.baseline, isNull);
+  });
+
+  test('raising a heel without sliding the foot is not counted as a step', () {
+    final detector = StepDetectionService();
+    for (var index = 0; index < 10; index += 1) {
+      detector.addBaselineFrame(
+        _poseFrame(
+          timestamp: Duration(milliseconds: index * 100),
+          wristX: .4,
+          leftFootX: .30,
+          rightFootX: .60,
+        ),
+      );
+    }
+    expect(detector.finalizeBaseline(), isTrue);
+
+    for (var index = 0; index < 6; index += 1) {
+      detector.addFrame(
+        _poseFrame(
+          timestamp: Duration(milliseconds: 1200 + index * 100),
+          wristX: .4,
+          leftFootX: .30,
+          rightFootX: .60,
+          leftHeelY: .68,
+        ),
+      );
+    }
+
+    expect(detector.snapshot.stepCount, 0);
+  });
+
   test('an invalid session is never summarized as normal', () {
     final session = AssessmentSession(
       id: 'invalid',
@@ -529,6 +594,7 @@ PoseFrame _poseFrame({
   double? leftAnkleX,
   double? leftHipX,
   double? leftKneeX,
+  double leftHeelY = .88,
   double imageAspectRatio = 1,
 }) {
   NormalizedPoint point(double x, double y) =>
@@ -544,7 +610,7 @@ PoseFrame _poseFrame({
       BodyLandmark.rightHip: point(.60, .60),
       BodyLandmark.rightKnee: point(.60, .74),
       BodyLandmark.leftAnkle: point(leftAnkleX ?? leftFootX, .85),
-      BodyLandmark.leftHeel: point(leftFootX, .88),
+      BodyLandmark.leftHeel: point(leftFootX, leftHeelY),
       BodyLandmark.leftFootIndex: point(leftFootX + .01, .88),
       BodyLandmark.rightAnkle: point(rightFootX, .85),
       BodyLandmark.rightHeel: point(rightFootX, .88),

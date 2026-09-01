@@ -20,6 +20,7 @@ enum FullertonState {
   idle,
   positioning,
   footBaseline,
+  armCalibration,
   ready,
   reaching,
   supervisionQuestion,

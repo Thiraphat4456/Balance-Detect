@@ -7,6 +7,7 @@ import 'package:balance_detect/core/widgets/loading_view.dart';
 import 'package:balance_detect/core/widgets/status_banner.dart';
 import 'package:balance_detect/features/assessment/domain/assessment_session.dart';
 import 'package:balance_detect/features/assessment/domain/session_summary.dart';
+import 'package:balance_detect/features/fullerton/domain/fullerton_reach_calibration_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -28,6 +29,7 @@ class HistoryDetailScreen extends ConsumerWidget {
         if (snapshot.hasError || session == null) {
           return const Center(child: Text('ไม่พบผลการประเมินนี้'));
         }
+        final fullerton = session.fullerton;
         return AppScaffoldBody(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -53,13 +55,20 @@ class HistoryDetailScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 14),
               ],
-              if (session.fullerton != null) ...[
+              if (fullerton != null) ...[
                 _ResultCard(
-                  title: 'Fullerton Advanced Balance Scale',
-                  value: '${session.fullerton!.score} / 4 คะแนน',
+                  title: fullerton.protocolVariant.isStandard
+                      ? 'Fullerton Advanced Balance Scale — Item 2'
+                      : fullerton.protocolVariant.isExperimental
+                      ? 'Modified Fullerton — แบบทดลอง 1 ฟุต'
+                      : 'Fullerton — ผลเดิมไม่ระบุโปรโตคอล',
+                  value: '${fullerton.score} / 4 คะแนน',
                   detail:
-                      'ตรวจพบ ${session.fullerton!.stepCount} ก้าว'
-                      '${session.fullerton!.supervisionRequired == true ? ' และต้องมีผู้ดูแล' : ''}',
+                      'ตรวจพบ ${fullerton.stepCount} ก้าว'
+                      '${fullerton.supervisionRequired == true ? ' และต้องมีผู้ควบคุมใกล้ชิด' : ''}'
+                      '${fullerton.targetDistanceCm == null ? '' : ' · เป้าหมาย ${fullerton.targetDistanceCm!.toStringAsFixed(1)} ซม.'}'
+                      '${fullerton.heightCm == null ? '' : ' · ส่วนสูง ${fullerton.heightCm!.toStringAsFixed(0)} ซม.'}'
+                      '${fullerton.protocolVariant.isStandard ? '' : ' · ไม่ใช้เทียบเกณฑ์ FAB มาตรฐานโดยตรง'}',
                 ),
                 const SizedBox(height: 14),
               ],
@@ -83,6 +92,12 @@ class HistoryDetailScreen extends ConsumerWidget {
                 detail:
                     SessionSummary.status(session) == AssessmentStatus.normal
                     ? 'ผลนี้เป็นการคัดกรองเบื้องต้น'
+                    : fullerton != null &&
+                          !fullerton.protocolVariant.isStandard &&
+                          session.functionalReach?.status !=
+                              AssessmentStatus.warning &&
+                          session.tug?.riskStatus != AssessmentStatus.risk
+                    ? 'ผล Fullerton นี้เป็นแบบทดลองหรือไม่ระบุโปรโตคอล จึงไม่ใช้เทียบเกณฑ์มาตรฐาน'
                     : 'ควรได้รับการประเมินเพิ่มเติมจากผู้เชี่ยวชาญ',
               ),
             ],

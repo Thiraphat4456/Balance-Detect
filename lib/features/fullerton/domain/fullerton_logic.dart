@@ -36,11 +36,18 @@ class FullertonStateMachine {
       FullertonState.error,
     },
     FullertonState.footBaseline: {
+      FullertonState.armCalibration,
+      FullertonState.invalid,
+      FullertonState.error,
+    },
+    FullertonState.armCalibration: {
       FullertonState.ready,
+      FullertonState.footBaseline,
       FullertonState.invalid,
       FullertonState.error,
     },
     FullertonState.ready: {
+      FullertonState.armCalibration,
       FullertonState.reaching,
       FullertonState.invalid,
       FullertonState.error,

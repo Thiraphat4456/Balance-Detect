@@ -33,6 +33,7 @@ void main() {
     for (final state in <FullertonState>[
       FullertonState.positioning,
       FullertonState.footBaseline,
+      FullertonState.armCalibration,
       FullertonState.ready,
       FullertonState.reaching,
       FullertonState.supervisionQuestion,
@@ -41,6 +42,19 @@ void main() {
       machine.transitionTo(state);
     }
     expect(machine.state, FullertonState.completed);
+  });
+
+  test('Fullerton can recalibrate the arm when feet move before countdown', () {
+    final machine = FullertonStateMachine()
+      ..transitionTo(FullertonState.positioning)
+      ..transitionTo(FullertonState.footBaseline)
+      ..transitionTo(FullertonState.armCalibration)
+      ..transitionTo(FullertonState.ready);
+
+    expect(
+      () => machine.transitionTo(FullertonState.armCalibration),
+      returnsNormally,
+    );
   });
 
   test('TUG accepts its complete protocol sequence', () {
