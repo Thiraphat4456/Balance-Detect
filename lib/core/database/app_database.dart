@@ -10,7 +10,7 @@ class AppDatabase {
     final databaseDirectory = await getDatabasesPath();
     return openDatabase(
       path.join(databaseDirectory, 'balance_detect.db'),
-      version: 2,
+      version: 3,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
       },
@@ -89,6 +89,8 @@ class AppDatabase {
             total_seconds REAL NOT NULL,
             threshold_seconds REAL NOT NULL,
             risk_status TEXT NOT NULL,
+            measurement_mode TEXT NOT NULL,
+            turn_verified INTEGER NOT NULL,
             stand_duration REAL,
             outbound_walk_duration REAL,
             turn_duration REAL,
@@ -116,6 +118,14 @@ class AppDatabase {
           );
           await database.execute(
             'ALTER TABLE fullerton_results ADD COLUMN height_cm REAL',
+          );
+        }
+        if (oldVersion < 3) {
+          await database.execute(
+            "ALTER TABLE tug_results ADD COLUMN measurement_mode TEXT NOT NULL DEFAULT 'legacyUnspecified'",
+          );
+          await database.execute(
+            'ALTER TABLE tug_results ADD COLUMN turn_verified INTEGER NOT NULL DEFAULT 0',
           );
         }
       },

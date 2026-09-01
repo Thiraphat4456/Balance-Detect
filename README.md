@@ -4,7 +4,7 @@ Balance Detect เป็นแอป Flutter สำหรับประเม�
 
 - Functional Reach Test — กล้อง + pose landmarks + anthropometric height calibration
 - Fullerton Advanced Balance Scale (Item 2 prototype) — กล้อง + height/foot/fingertip calibration + fixed virtual target + temporal step detection
-- Timed Up and Go (TUG) — accelerometer + gyroscope + motion state machine
+- Timed Up and Go (TUG) — Full IMU หรือ Accelerometer-only fallback + motion state machine
 
 แอปไม่สร้างผลจำลอง ผลที่บันทึกต้องมาจาก camera/sensor workflow จริง และผลที่ขาดความสมบูรณ์จะถูกหยุดพร้อมเหตุผลโดยไม่บันทึกเป็นผลสุขภาพปกติ
 
@@ -177,12 +177,13 @@ Pure scoring function:
 ## TUG Sensor Pipeline
 
 ```text
-Raw accelerometer + gyroscope
-  → timestamp synchronization (≤100 ms gap)
+Capability probe
+  → Full IMU: accelerometer + gyroscope, timestamp sync ≤100 ms
+  → Basic fallback: accelerometer only
   → 3-second resting calibration
-  → gravity vector / gyro bias / noise validation
+  → gravity vector / optional gyro bias / noise validation
   → exponential noise filtering
-  → dynamic acceleration + angular features
+  → dynamic acceleration + optional angular features
   → temporal motion detection
   → TUG state machine
   → monotonic elapsed timestamps
@@ -197,8 +198,11 @@ idle → calibrating → ready → sitting → standingUp → walkingOut
 
 - Sit-to-stand ใช้ acceleration และ angular velocity หลาย sample/window ไม่ใช้ sample เดียว
 - Walking ใช้ filtered dynamic acceleration หลัง stand transition
-- Turn ใช้ angular velocity รอบแกน gravity และ integration ตามเวลา ก่อนเปลี่ยนเป็น walking back
+- ในโหมด Full IMU ช่วง Turn ใช้ angular velocity รอบแกน gravity และ integration ตามเวลา ก่อนเปลี่ยนเป็น walking back
 - Sit-down ต้องพบ motion transition หลัง return phase แล้วตามด้วย quiet window และ gravity magnitude ที่สมเหตุสมผล
+- ถ้าไม่มี Gyroscope แอปยังเริ่ม TUG ได้โดยอัตโนมัติในโหมด `accelerometerOnly`: ให้คาดโทรศัพท์แน่นด้านหน้าต้นขา ใช้ outbound/return motion gating และเทียบแนวแรงโน้มถ่วงกับท่านั่งที่คาลิเบตเพื่อไม่ให้การหยุดยืนถูกนับเป็นนั่ง
+- โหมด `accelerometerOnly` ไม่อ้างว่าตรวจยืนยันการหมุน 180° และไม่สร้างค่า phase duration ปลอม จึงบันทึก/แสดงเฉพาะ total time พร้อมป้ายโหมดและ confidence ที่จำกัดไม่เกิน 0.72
+- ผล TUG บันทึก `measurement_mode` และ `turn_verified`; ผลเดิมก่อน schema version 3 ถูกระบุเป็น `legacyUnspecified`
 - Timer เริ่มหลัง countdown ที่ sensor sample แรกและหยุดอัตโนมัติเมื่อ state `completed`; ใช้ `Stopwatch`/event elapsed duration ไม่ใช้ UI frames
 - หลังผู้ใช้กดปรับเทียบครั้งเดียว ระบบพูดขั้นตอน TUG ภาษาไทย รอช่วงอธิบาย นับถอยหลัง 3–2–1 และเริ่ม sensor stream อัตโนมัติ จากนั้นประกาศเมื่อพบการลุก เดินออก หมุน เดินกลับ นั่งลง ผลรวม และเหตุที่ต้องหยุด โดยมีปุ่มเปิด–ปิดเสียงทุกหน้า
 - มี timeout 60 วินาทีและปุ่มยกเลิกฉุกเฉิน ทั้งสองกรณีไม่สร้างผลปกติ

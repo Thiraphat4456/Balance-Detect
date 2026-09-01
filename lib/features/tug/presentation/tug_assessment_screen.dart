@@ -17,6 +17,7 @@ import 'package:balance_detect/features/assessment/domain/assessment_session.dar
 import 'package:balance_detect/features/tug/domain/sensor_calibration_service.dart';
 import 'package:balance_detect/features/tug/domain/sensor_models.dart';
 import 'package:balance_detect/features/tug/domain/sensor_noise_filter.dart';
+import 'package:balance_detect/features/tug/domain/tug_accelerometer_analyzer.dart';
 import 'package:balance_detect/features/tug/domain/tug_logic.dart';
 import 'package:balance_detect/features/tug/domain/tug_motion_analyzer.dart';
 import 'package:balance_detect/features/tug/domain/tug_result.dart';
@@ -48,7 +49,7 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
   SensorAvailability? _availability;
   SensorCalibration? _calibration;
   SensorNoiseFilter? _noiseFilter;
-  TugMotionAnalyzer? _analyzer;
+  TugAnalyzer? _analyzer;
   TugAnalysisSnapshot? _analysis;
   TugResult? _result;
   SensorSample? _latestRaw;
@@ -64,6 +65,8 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
   bool _voiceEnabled = true;
   int? _countdown;
   double _calibrationProgress = 0;
+
+  TugMeasurementMode? get _measurementMode => _availability?.preferredMode;
 
   @override
   void initState() {
@@ -92,15 +95,13 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
         _availability = availability;
         _probing = false;
         if (!availability.ready) {
-          _setupError = !availability.accelerometerAvailable
-              ? 'ไม่พบ Accelerometer บนอุปกรณ์นี้'
-              : 'ไม่พบ Gyroscope บนอุปกรณ์นี้';
+          _setupError = 'ไม่พบ Accelerometer บนอุปกรณ์นี้';
         }
       });
       unawaited(
         _voiceGuidance.announce(
           availability.ready
-              ? TugInstructions.sensorReady
+              ? TugInstructions.sensorReadyFor(availability.preferredMode!)
               : _setupError ?? 'เซนเซอร์ไม่พร้อม กรุณาตรวจสอบอุปกรณ์',
           force: true,
         ),
@@ -118,7 +119,8 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
   }
 
   Future<void> _startCalibration() async {
-    if (!(_availability?.ready ?? false)) return;
+    final mode = _measurementMode;
+    if (!(_availability?.ready ?? false) || mode == null) return;
     _stateMachine.transitionTo(TugState.calibrating);
     _calibrationSamples.clear();
     _calibrationStart = null;
@@ -131,7 +133,7 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
       _voiceGuidance.announce(TugInstructions.calibration, force: true),
     );
     try {
-      await _sensorService.start();
+      await _sensorService.start(mode: mode);
       if (mounted) setState(() {});
     } catch (error) {
       AppLogger.error('sensor_start_failed', error);
@@ -159,11 +161,21 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
     }
     if (_pendingTestStart && _stateMachine.state == TugState.ready) {
       _pendingTestStart = false;
-      _noiseFilter = SensorNoiseFilter();
-      _analyzer = TugMotionAnalyzer(
-        calibration: _calibration!,
-        stateMachine: _stateMachine,
-      )..start(sample.elapsed);
+      final calibration = _calibration!;
+      _noiseFilter = SensorNoiseFilter(
+        mode: calibration.mode,
+        initialGravity: calibration.gravityVector,
+      );
+      _analyzer = calibration.mode == TugMeasurementMode.fullImu
+          ? TugMotionAnalyzer(
+              calibration: calibration,
+              stateMachine: _stateMachine,
+            )
+          : AccelerometerOnlyTugAnalyzer(
+              calibration: calibration,
+              stateMachine: _stateMachine,
+            );
+      _analyzer!.start(sample.elapsed);
       AppLogger.event('tug_started');
     }
     final analyzer = _analyzer;
@@ -184,7 +196,10 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
         'elapsedMs': analysis.elapsed.inMilliseconds,
         'confidence': analysis.confidence,
       });
-      final prompt = TugInstructions.promptForState(analysis.state);
+      final prompt = TugInstructions.promptForState(
+        analysis.state,
+        mode: analysis.measurementMode,
+      );
       if (prompt != null && analysis.state != TugState.completed) {
         unawaited(_voiceGuidance.announce(prompt, force: true));
       }
@@ -204,7 +219,14 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
   Future<void> _finishCalibration() async {
     await _sensorService.stop();
     try {
-      final calibration = _calibrationService.calibrate(_calibrationSamples);
+      final mode = _measurementMode;
+      if (mode == null) {
+        throw const FormatException('ไม่พบโหมดเซนเซอร์ที่รองรับ');
+      }
+      final calibration = _calibrationService.calibrate(
+        _calibrationSamples,
+        mode: mode,
+      );
       _calibration = calibration;
       _stateMachine.transitionTo(TugState.ready);
       AppLogger.event('tug_calibration_success', <String, Object?>{
@@ -227,7 +249,11 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
       return;
     }
     _automaticCountdownScheduled = true;
-    unawaited(_voiceGuidance.announce(TugInstructions.calibrated, force: true));
+    final mode = _measurementMode;
+    if (mode == null) return;
+    unawaited(
+      _voiceGuidance.announce(TugInstructions.calibratedFor(mode), force: true),
+    );
     if (mounted) setState(() {});
     await Future<void>.delayed(
       _voiceEnabled
@@ -253,7 +279,12 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
     }
     if (!mounted || _stateMachine.state != TugState.ready) return;
     try {
-      await _sensorService.start();
+      final mode = _measurementMode;
+      if (mode == null) {
+        _invalidate(InvalidReason.sensorUnavailable);
+        return;
+      }
+      await _sensorService.start(mode: mode);
       if (!mounted || _stateMachine.state != TugState.ready) return;
       setState(() => _countdown = 0);
       _pendingTestStart = true;
@@ -266,6 +297,8 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
   void _finishTest(TugAnalysisSnapshot analysis) {
     final timeline = analysis.timeline!;
     final includePhases =
+        analysis.measurementMode == TugMeasurementMode.fullImu &&
+        analysis.turnVerified &&
         analysis.confidence >= AssessmentConfig.tugPhaseConfidence;
     final seconds = timeline.totalSeconds;
     _result = TugResult(
@@ -275,6 +308,8 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
       totalSeconds: seconds,
       thresholdSeconds: AssessmentConfig.tugRiskThresholdSeconds,
       riskStatus: TugRiskClassifier.classifySeconds(seconds),
+      measurementMode: analysis.measurementMode,
+      turnVerified: analysis.turnVerified,
       standDuration: includePhases ? timeline.standDuration : null,
       outboundWalkDuration: includePhases
           ? timeline.outboundWalkDuration
@@ -368,19 +403,24 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
     if (state == TugState.invalid) return _invalidMessage;
     if (state == TugState.idle) {
       return _availability?.ready == true
-          ? TugInstructions.sensorReady
+          ? TugInstructions.sensorReadyFor(_measurementMode!)
           : 'กำลังตรวจสอบเซนเซอร์';
     }
     if (state == TugState.calibrating) return TugInstructions.calibration;
     if (state == TugState.ready) {
       final countdown = _countdown;
       return countdown == null
-          ? TugInstructions.calibrated
+          ? TugInstructions.calibratedFor(
+              _measurementMode ?? TugMeasurementMode.fullImu,
+            )
           : countdown == 0
           ? TugInstructions.start
           : TugInstructions.countdownWord(countdown);
     }
-    return TugInstructions.promptForState(state) ??
+    return TugInstructions.promptForState(
+          state,
+          mode: _measurementMode ?? TugMeasurementMode.fullImu,
+        ) ??
         'กำลังวิเคราะห์การเคลื่อนไหว';
   }
 
@@ -464,12 +504,18 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
             pending: _probing,
           ),
           ChecklistTile(
-            label: 'Gyroscope พร้อม',
-            passed: _availability?.gyroscopeAvailable ?? false,
+            label: _measurementMode == TugMeasurementMode.accelerometerOnly
+                ? 'โหมดพื้นฐานไม่บังคับใช้ Gyroscope'
+                : 'Gyroscope พร้อม',
+            passed:
+                _availability?.gyroscopeAvailable == true ||
+                _measurementMode == TugMeasurementMode.accelerometerOnly,
             pending: _probing,
           ),
-          const PreparationItem(
-            label: 'คาดโทรศัพท์ให้แน่นบริเวณเอว',
+          PreparationItem(
+            label: _measurementMode == TugMeasurementMode.accelerometerOnly
+                ? 'คาดโทรศัพท์แน่นด้านหน้าต้นขา เพื่อแยกท่านั่งกับท่ายืน'
+                : 'คาดโทรศัพท์ให้แน่นบริเวณเอว',
             icon: Icons.phone_android_rounded,
           ),
           const PreparationItem(
@@ -485,6 +531,16 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
                 'กดปรับเทียบครั้งเดียว แล้วฟังเสียงสั่งเริ่มโดยไม่ต้องแตะจออีก',
             icon: Icons.record_voice_over_outlined,
           ),
+          if (_measurementMode == TugMeasurementMode.accelerometerOnly) ...[
+            const SizedBox(height: 12),
+            const StatusBanner(
+              status: AssessmentStatus.warning,
+              label: 'กำลังใช้โหมด Accelerometer-only',
+              detail:
+                  'ทดสอบได้โดยไม่ใช้ไจโร แต่ระบบจะบันทึกเฉพาะเวลารวม '
+                  'และไม่อ้างว่าตรวจยืนยันช่วงหมุนตัว',
+            ),
+          ],
           if (_setupError != null) ...[
             const SizedBox(height: 12),
             StatusBanner(
@@ -657,14 +713,21 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
     TugState.sitting => 'เริ่มลุกขึ้น',
     TugState.standingUp => 'ตรวจพบการลุก',
     TugState.walkingOut => 'กำลังเดินไป',
-    TugState.turning => 'ตรวจพบการหมุนตัว',
-    TugState.walkingBack => 'กำลังเดินกลับ',
+    TugState.turning =>
+      _measurementMode == TugMeasurementMode.accelerometerOnly
+          ? 'ถึงช่วงหมุนกลับ'
+          : 'ตรวจพบการหมุนตัว',
+    TugState.walkingBack =>
+      _measurementMode == TugMeasurementMode.accelerometerOnly
+          ? 'เดินกลับไปที่เก้าอี้'
+          : 'กำลังเดินกลับ',
     TugState.sittingDown => 'กำลังตรวจการนั่งลง',
     _ => 'กำลังวิเคราะห์การเคลื่อนไหว',
   };
 
   Widget _debugCard() {
     final raw = _latestRaw;
+    final rawGyroscope = raw?.gyroscope;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -672,7 +735,8 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
       child: Text(
         'state ${_stateMachine.state.name}\n'
         'acc ${raw == null ? '-' : '${raw.accelerometer.x.toStringAsFixed(2)}, ${raw.accelerometer.y.toStringAsFixed(2)}, ${raw.accelerometer.z.toStringAsFixed(2)}'}\n'
-        'gyro ${raw == null ? '-' : '${raw.gyroscope.x.toStringAsFixed(2)}, ${raw.gyroscope.y.toStringAsFixed(2)}, ${raw.gyroscope.z.toStringAsFixed(2)}'}\n'
+        'mode ${_measurementMode?.name ?? '-'}\n'
+        'gyro ${rawGyroscope == null ? '-' : '${rawGyroscope.x.toStringAsFixed(2)}, ${rawGyroscope.y.toStringAsFixed(2)}, ${rawGyroscope.z.toStringAsFixed(2)}'}\n'
         'dynamic ${_analysis?.dynamicAcceleration.toStringAsFixed(2) ?? '-'} '
         'rest ${_analysis?.gravityMagnitudeDeviation.toStringAsFixed(2) ?? '-'} '
         'angular ${_analysis?.angularVelocity.toStringAsFixed(2) ?? '-'}',
@@ -711,6 +775,17 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
                   ? 'ใช้เวลามากกว่า 13.5 วินาที ควรได้รับการประเมินเพิ่มเติม'
                   : 'ใช้เวลาไม่เกิน 13.5 วินาที',
             ),
+            if (result.measurementMode ==
+                TugMeasurementMode.accelerometerOnly) ...[
+              const SizedBox(height: 14),
+              const StatusBanner(
+                status: AssessmentStatus.warning,
+                label: 'ผลจากโหมด Accelerometer-only',
+                detail:
+                    'ไม่มีการยืนยันการหมุนด้วย Gyroscope '
+                    'จึงแสดงเฉพาะเวลารวมและไม่แสดงเวลารายช่วง',
+              ),
+            ],
             const SizedBox(height: 22),
             Card(
               child: Padding(
@@ -722,6 +797,22 @@ class _TugAssessmentScreenState extends ConsumerState<TugAssessmentScreen>
                         const Expanded(child: Text('เกณฑ์คัดกรอง')),
                         Text(
                           '> ${result.thresholdSeconds.toStringAsFixed(1)} วินาที',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 28),
+                    Row(
+                      children: [
+                        const Expanded(child: Text('วิธีตรวจจับ')),
+                        Text(
+                          result.measurementMode == TugMeasurementMode.fullImu
+                              ? 'Accelerometer + Gyroscope'
+                              : result.measurementMode ==
+                                    TugMeasurementMode.accelerometerOnly
+                              ? 'Accelerometer-only'
+                              : 'ผลเดิมไม่ระบุ',
+                          textAlign: TextAlign.end,
                           style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
                       ],

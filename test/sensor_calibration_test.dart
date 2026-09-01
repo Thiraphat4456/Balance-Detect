@@ -18,7 +18,7 @@ void main() {
       final calibration = const SensorCalibrationService().calibrate(samples);
 
       expect(calibration.gravityVector.y, closeTo(9.81, .001));
-      expect(calibration.gyroscopeBias.x, closeTo(.02, .001));
+      expect(calibration.gyroscopeBias!.x, closeTo(.02, .001));
       expect(calibration.sampleCount, 100);
       expect(calibration.confidence, greaterThan(.8));
     },
@@ -29,5 +29,26 @@ void main() {
       () => const SensorCalibrationService().calibrate(const <SensorSample>[]),
       throwsFormatException,
     );
+  });
+
+  test('calibration accepts accelerometer-only resting samples', () {
+    final samples = List<SensorSample>.generate(100, (index) {
+      final smallNoise = index.isEven ? .01 : -.01;
+      return SensorSample(
+        elapsed: Duration(milliseconds: index * 20),
+        accelerometer: Vector3Sample(smallNoise, 9.81, 0),
+      );
+    });
+
+    final calibration = const SensorCalibrationService().calibrate(
+      samples,
+      mode: TugMeasurementMode.accelerometerOnly,
+    );
+
+    expect(calibration.mode, TugMeasurementMode.accelerometerOnly);
+    expect(calibration.gravityVector.y, closeTo(9.81, .001));
+    expect(calibration.gyroscopeBias, isNull);
+    expect(calibration.gyroscopeNoise, isNull);
+    expect(calibration.confidence, lessThanOrEqualTo(.75));
   });
 }

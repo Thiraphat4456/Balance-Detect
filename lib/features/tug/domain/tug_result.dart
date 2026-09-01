@@ -1,4 +1,5 @@
 import 'package:balance_detect/core/domain/assessment_enums.dart';
+import 'package:balance_detect/features/tug/domain/sensor_models.dart';
 
 class TugResult {
   const TugResult({
@@ -8,6 +9,8 @@ class TugResult {
     required this.totalSeconds,
     required this.thresholdSeconds,
     required this.riskStatus,
+    required this.measurementMode,
+    required this.turnVerified,
     required this.confidence,
     required this.valid,
     this.standDuration,
@@ -24,6 +27,8 @@ class TugResult {
   final double totalSeconds;
   final double thresholdSeconds;
   final AssessmentStatus riskStatus;
+  final TugMeasurementMode measurementMode;
+  final bool turnVerified;
   final double? standDuration;
   final double? outboundWalkDuration;
   final double? turnDuration;
@@ -40,6 +45,8 @@ class TugResult {
     'total_seconds': totalSeconds,
     'threshold_seconds': thresholdSeconds,
     'risk_status': riskStatus.name,
+    'measurement_mode': measurementMode.name,
+    'turn_verified': turnVerified ? 1 : 0,
     'stand_duration': standDuration,
     'outbound_walk_duration': outboundWalkDuration,
     'turn_duration': turnDuration,
@@ -57,6 +64,10 @@ class TugResult {
     totalSeconds: (map['total_seconds']! as num).toDouble(),
     thresholdSeconds: (map['threshold_seconds']! as num).toDouble(),
     riskStatus: assessmentStatusFromName(map['risk_status']! as String),
+    measurementMode: tugMeasurementModeFromName(
+      map['measurement_mode'] as String?,
+    ),
+    turnVerified: map['turn_verified'] == 1,
     standDuration: (map['stand_duration'] as num?)?.toDouble(),
     outboundWalkDuration: (map['outbound_walk_duration'] as num?)?.toDouble(),
     turnDuration: (map['turn_duration'] as num?)?.toDouble(),

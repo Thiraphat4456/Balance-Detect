@@ -7,6 +7,7 @@ import 'package:balance_detect/core/widgets/loading_view.dart';
 import 'package:balance_detect/features/assessment/domain/assessment_session.dart';
 import 'package:balance_detect/features/assessment/domain/session_summary.dart';
 import 'package:balance_detect/features/fullerton/domain/fullerton_reach_calibration_service.dart';
+import 'package:balance_detect/features/tug/domain/sensor_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -156,7 +157,11 @@ class _HistoryCard extends StatelessWidget {
                 ),
               if (session.tug != null)
                 _ValueRow(
-                  label: 'TUG',
+                  label:
+                      session.tug!.measurementMode ==
+                          TugMeasurementMode.accelerometerOnly
+                      ? 'TUG · Accelerometer-only'
+                      : 'TUG',
                   value:
                       '${session.tug!.totalSeconds.toStringAsFixed(1)} วินาที',
                 ),

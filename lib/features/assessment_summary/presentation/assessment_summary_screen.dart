@@ -8,6 +8,7 @@ import 'package:balance_detect/features/assessment/domain/assessment_session.dar
 import 'package:balance_detect/features/fullerton/domain/fullerton_reach_calibration_service.dart';
 import 'package:balance_detect/features/fullerton/domain/fullerton_result.dart';
 import 'package:balance_detect/features/functional_reach/domain/functional_reach_result.dart';
+import 'package:balance_detect/features/tug/domain/sensor_models.dart';
 import 'package:balance_detect/features/tug/domain/tug_result.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -44,6 +45,7 @@ class AssessmentSummaryScreen extends ConsumerWidget {
         final risk = tug?.riskStatus == AssessmentStatus.risk;
         final warning =
             reach?.status == AssessmentStatus.warning ||
+            tug?.measurementMode == TugMeasurementMode.accelerometerOnly ||
             (fullerton != null &&
                 (!fullerton.protocolVariant.isStandard ||
                     fullerton.score <= 2));
@@ -52,6 +54,11 @@ class AssessmentSummaryScreen extends ConsumerWidget {
             reach?.status != AssessmentStatus.warning &&
             fullerton != null &&
             !fullerton.protocolVariant.isStandard;
+        final accelerometerOnlyTugWarning =
+            !risk &&
+            reach?.status != AssessmentStatus.warning &&
+            tug?.measurementMode == TugMeasurementMode.accelerometerOnly &&
+            (fullerton == null || fullerton.protocolVariant.isStandard);
         final overallStatus = !hasResults
             ? AssessmentStatus.invalid
             : risk
@@ -98,22 +105,26 @@ class AssessmentSummaryScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 14),
               _SummaryCard(
-                title: 'Timed Up and Go (TUG)',
+                title:
+                    tug?.measurementMode == TugMeasurementMode.accelerometerOnly
+                    ? 'TUG — Accelerometer-only'
+                    : 'Timed Up and Go (TUG)',
                 value: tug == null
                     ? 'ยังไม่มีผล'
                     : '${tug.totalSeconds.toStringAsFixed(1)} วินาที',
                 detail: tug == null
                     ? 'ทำแบบทดสอบเพื่อเพิ่มข้อมูล'
-                    : tug.totalSeconds >
-                          AssessmentConfig.tugRiskThresholdSeconds
-                    ? 'มากกว่า ${AssessmentConfig.tugRiskThresholdSeconds.toStringAsFixed(1)} วินาที'
-                    : 'ไม่เกิน ${AssessmentConfig.tugRiskThresholdSeconds.toStringAsFixed(1)} วินาที',
+                    : '${tug.totalSeconds > AssessmentConfig.tugRiskThresholdSeconds ? 'มากกว่า' : 'ไม่เกิน'} '
+                          '${AssessmentConfig.tugRiskThresholdSeconds.toStringAsFixed(1)} วินาที'
+                          '${tug.measurementMode == TugMeasurementMode.accelerometerOnly ? ' · ไม่ยืนยันช่วงหมุน' : ''}',
               ),
               const SizedBox(height: 24),
               StatusBanner(
                 status: overallStatus,
                 label: !hasResults
                     ? 'ข้อมูลยังไม่เพียงพอ'
+                    : accelerometerOnlyTugWarning
+                    ? 'มีผล TUG จากโหมดพื้นฐาน'
                     : experimentalOnlyWarning
                     ? 'มีผล Fullerton แบบทดลอง'
                     : overallStatus == AssessmentStatus.normal
@@ -121,6 +132,8 @@ class AssessmentSummaryScreen extends ConsumerWidget {
                     : 'พบสัญญาณความเสี่ยงด้านการทรงตัว',
                 detail: !hasResults
                     ? 'ยังไม่มีผลที่ใช้ได้สำหรับสรุป'
+                    : accelerometerOnlyTugWarning
+                    ? 'ผล Accelerometer-only ไม่ได้ยืนยันช่วงหมุนและควรเทียบกับผู้จับเวลาจริง'
                     : experimentalOnlyWarning
                     ? 'ผล Modified FAB ถูกแยกจากการตีความตามเกณฑ์มาตรฐาน'
                     : overallStatus == AssessmentStatus.normal

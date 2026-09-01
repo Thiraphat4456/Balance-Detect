@@ -92,4 +92,13 @@ abstract final class AssessmentConfig {
   static const tugSittingGravityMagnitudeTolerance = 0.35;
   static const tugSittingAngularVelocity = 0.14;
   static const tugPhaseConfidence = 0.60;
+  static const tugAccelerometerOnlyMinOutbound = Duration(seconds: 2);
+  static const tugAccelerometerOnlyTurnWindow = Duration(milliseconds: 800);
+  static const tugAccelerometerOnlyMinReturn = Duration(milliseconds: 1500);
+  static const tugAccelerometerOnlyQuietWindow = Duration(milliseconds: 900);
+  static const tugAccelerometerOnlyQuietAcceleration = 0.18;
+  static const tugAccelerometerOnlyMotionEvidence = 0.42;
+  static const tugAccelerometerOnlySeatedAngleDegrees = 35.0;
+  static const tugAccelerometerOnlyPostureMargin = 0.08;
+  static const tugAccelerometerOnlyConfidenceCap = 0.72;
 }

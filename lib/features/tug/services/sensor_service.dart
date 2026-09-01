@@ -8,7 +8,7 @@ import 'package:sensors_plus/sensors_plus.dart';
 abstract interface class SensorService {
   Stream<SensorSample> get samples;
   Stream<Object> get errors;
-  Future<void> start();
+  Future<void> start({required TugMeasurementMode mode});
   Future<void> stop();
   Future<SensorAvailability> probe();
 }
@@ -22,6 +22,7 @@ class SensorsPlusService implements SensorService {
   StreamSubscription<GyroscopeEvent>? _gyroscopeSubscription;
   GyroscopeEvent? _latestGyroscope;
   Stopwatch? _stopwatch;
+  TugMeasurementMode _mode = TugMeasurementMode.fullImu;
 
   @override
   Stream<SensorSample> get samples => _sampleController.stream;
@@ -83,17 +84,20 @@ class SensorsPlusService implements SensorService {
   }
 
   @override
-  Future<void> start() async {
+  Future<void> start({required TugMeasurementMode mode}) async {
     await stop();
+    _mode = mode;
     _stopwatch = Stopwatch()..start();
-    _gyroscopeSubscription =
-        gyroscopeEventStream(
-          samplingPeriod: AssessmentConfig.sensorSamplingPeriod,
-        ).listen(
-          (event) => _latestGyroscope = event,
-          onError: _handleError,
-          cancelOnError: false,
-        );
+    if (mode.usesGyroscope) {
+      _gyroscopeSubscription =
+          gyroscopeEventStream(
+            samplingPeriod: AssessmentConfig.sensorSamplingPeriod,
+          ).listen(
+            (event) => _latestGyroscope = event,
+            onError: _handleError,
+            cancelOnError: false,
+          );
+    }
     _accelerometerSubscription = accelerometerEventStream(
       samplingPeriod: AssessmentConfig.sensorSamplingPeriod,
     ).listen(_onAccelerometer, onError: _handleError, cancelOnError: false);
@@ -102,11 +106,14 @@ class SensorsPlusService implements SensorService {
   void _onAccelerometer(AccelerometerEvent accelerometer) {
     final gyroscope = _latestGyroscope;
     final stopwatch = _stopwatch;
-    if (gyroscope == null || stopwatch == null) return;
-    final timestampGap = accelerometer.timestamp
-        .difference(gyroscope.timestamp)
-        .abs();
-    if (timestampGap > const Duration(milliseconds: 100)) return;
+    if (stopwatch == null) return;
+    if (_mode.usesGyroscope) {
+      if (gyroscope == null) return;
+      final timestampGap = accelerometer.timestamp
+          .difference(gyroscope.timestamp)
+          .abs();
+      if (timestampGap > const Duration(milliseconds: 100)) return;
+    }
     _sampleController.add(
       SensorSample(
         elapsed: stopwatch.elapsed,
@@ -115,7 +122,9 @@ class SensorsPlusService implements SensorService {
           accelerometer.y,
           accelerometer.z,
         ),
-        gyroscope: Vector3Sample(gyroscope.x, gyroscope.y, gyroscope.z),
+        gyroscope: gyroscope == null
+            ? null
+            : Vector3Sample(gyroscope.x, gyroscope.y, gyroscope.z),
       ),
     );
   }

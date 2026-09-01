@@ -1,5 +1,6 @@
 import 'package:balance_detect/core/domain/assessment_enums.dart';
 import 'package:balance_detect/features/tug/domain/tug_instructions.dart';
+import 'package:balance_detect/features/tug/domain/sensor_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -45,6 +46,20 @@ void main() {
     expect(
       TugInstructions.automaticStartDetail,
       contains('ไม่ต้องกดปุ่มเพิ่ม'),
+    );
+  });
+
+  test('accelerometer-only instructions never claim the turn was detected', () {
+    expect(
+      TugInstructions.sensorReadyFor(TugMeasurementMode.accelerometerOnly),
+      allOf(contains('ไม่มีไจโร'), contains('ต้นขา')),
+    );
+    expect(
+      TugInstructions.promptForState(
+        TugState.turning,
+        mode: TugMeasurementMode.accelerometerOnly,
+      ),
+      isNot(contains('ตรวจพบการหมุน')),
     );
   });
 }

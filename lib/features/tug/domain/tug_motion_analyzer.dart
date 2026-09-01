@@ -8,42 +8,67 @@ import 'package:balance_detect/features/tug/domain/tug_logic.dart';
 class TugTimeline {
   const TugTimeline({
     required this.testStart,
-    required this.standDetected,
-    required this.outboundWalkStart,
-    required this.turnStart,
-    required this.turnEnd,
-    required this.returnWalkStart,
-    required this.sitDownStart,
-    required this.sitDetected,
     required this.testEnd,
+    this.standDetected,
+    this.outboundWalkStart,
+    this.turnStart,
+    this.turnEnd,
+    this.returnWalkStart,
+    this.sitDownStart,
+    this.sitDetected,
   });
 
   final Duration testStart;
-  final Duration standDetected;
-  final Duration outboundWalkStart;
-  final Duration turnStart;
-  final Duration turnEnd;
-  final Duration returnWalkStart;
-  final Duration sitDownStart;
-  final Duration sitDetected;
+  final Duration? standDetected;
+  final Duration? outboundWalkStart;
+  final Duration? turnStart;
+  final Duration? turnEnd;
+  final Duration? returnWalkStart;
+  final Duration? sitDownStart;
+  final Duration? sitDetected;
   final Duration testEnd;
 
   double get totalSeconds =>
       (testEnd - testStart).inMicroseconds / Duration.microsecondsPerSecond;
-  double get standDuration =>
-      (outboundWalkStart - testStart).inMicroseconds /
-      Duration.microsecondsPerSecond;
-  double get outboundWalkDuration =>
-      (turnStart - outboundWalkStart).inMicroseconds /
-      Duration.microsecondsPerSecond;
-  double get turnDuration =>
-      (turnEnd - turnStart).inMicroseconds / Duration.microsecondsPerSecond;
-  double get returnWalkDuration =>
-      (sitDownStart - returnWalkStart).inMicroseconds /
-      Duration.microsecondsPerSecond;
-  double get sitDuration =>
-      (sitDetected - sitDownStart).inMicroseconds /
-      Duration.microsecondsPerSecond;
+  double? get standDuration {
+    final outbound = outboundWalkStart;
+    return outbound == null
+        ? null
+        : (outbound - testStart).inMicroseconds /
+              Duration.microsecondsPerSecond;
+  }
+
+  double? get outboundWalkDuration {
+    final outbound = outboundWalkStart;
+    final turn = turnStart;
+    return outbound == null || turn == null
+        ? null
+        : (turn - outbound).inMicroseconds / Duration.microsecondsPerSecond;
+  }
+
+  double? get turnDuration {
+    final start = turnStart;
+    final end = turnEnd;
+    return start == null || end == null
+        ? null
+        : (end - start).inMicroseconds / Duration.microsecondsPerSecond;
+  }
+
+  double? get returnWalkDuration {
+    final start = returnWalkStart;
+    final sit = sitDownStart;
+    return start == null || sit == null
+        ? null
+        : (sit - start).inMicroseconds / Duration.microsecondsPerSecond;
+  }
+
+  double? get sitDuration {
+    final start = sitDownStart;
+    final detected = sitDetected;
+    return start == null || detected == null
+        ? null
+        : (detected - start).inMicroseconds / Duration.microsecondsPerSecond;
+  }
 }
 
 class TugAnalysisSnapshot {
@@ -54,6 +79,8 @@ class TugAnalysisSnapshot {
     required this.gravityMagnitudeDeviation,
     required this.angularVelocity,
     required this.confidence,
+    required this.measurementMode,
+    required this.turnVerified,
     this.timeline,
   });
 
@@ -63,10 +90,18 @@ class TugAnalysisSnapshot {
   final double gravityMagnitudeDeviation;
   final double angularVelocity;
   final double confidence;
+  final TugMeasurementMode measurementMode;
+  final bool turnVerified;
   final TugTimeline? timeline;
 }
 
-class TugMotionAnalyzer {
+abstract interface class TugAnalyzer {
+  TugMeasurementMode get measurementMode;
+  void start(Duration elapsed);
+  TugAnalysisSnapshot process(CalibratedSensorSample sample);
+}
+
+class TugMotionAnalyzer implements TugAnalyzer {
   TugMotionAnalyzer({required this.calibration, required this.stateMachine});
 
   final SensorCalibration calibration;
@@ -85,6 +120,10 @@ class TugMotionAnalyzer {
   Duration? _lastSampleElapsed;
   double _integratedTurnRadians = 0;
 
+  @override
+  TugMeasurementMode get measurementMode => TugMeasurementMode.fullImu;
+
+  @override
   void start(Duration elapsed) {
     if (stateMachine.state != TugState.ready) {
       throw StateError('TUG analyzer must start from ready state');
@@ -93,6 +132,7 @@ class TugMotionAnalyzer {
     _testStart = elapsed;
   }
 
+  @override
   TugAnalysisSnapshot process(CalibratedSensorSample sample) {
     final start = _testStart;
     if (start == null) throw StateError('TUG analyzer has not started');
@@ -255,6 +295,8 @@ class TugMotionAnalyzer {
       gravityMagnitudeDeviation: gravityMagnitudeDeviation,
       angularVelocity: angularVelocity,
       confidence: confidence,
+      measurementMode: measurementMode,
+      turnVerified: true,
       timeline: stateMachine.state == TugState.completed
           ? _buildTimeline(sample.elapsed)
           : null,
@@ -282,7 +324,10 @@ class TugMotionAnalyzer {
       : _window.last.elapsed - _window.first.elapsed;
 
   double _turnRateAroundGravity(CalibratedSensorSample sample) =>
-      sample.correctedGyroscope.dot(calibration.gravityVector.normalized).abs();
+      sample.correctedGyroscope
+          ?.dot(calibration.gravityVector.normalized)
+          .abs() ??
+      0;
 
   double _mean(Iterable<double> values) {
     final list = values.toList(growable: false);

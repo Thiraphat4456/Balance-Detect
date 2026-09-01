@@ -8,6 +8,7 @@ import 'package:balance_detect/core/widgets/status_banner.dart';
 import 'package:balance_detect/features/assessment/domain/assessment_session.dart';
 import 'package:balance_detect/features/assessment/domain/session_summary.dart';
 import 'package:balance_detect/features/fullerton/domain/fullerton_reach_calibration_service.dart';
+import 'package:balance_detect/features/tug/domain/sensor_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -74,12 +75,18 @@ class HistoryDetailScreen extends ConsumerWidget {
               ],
               if (session.tug != null) ...[
                 _ResultCard(
-                  title: 'Timed Up and Go (TUG)',
+                  title:
+                      session.tug!.measurementMode ==
+                          TugMeasurementMode.accelerometerOnly
+                      ? 'Timed Up and Go — Accelerometer-only'
+                      : 'Timed Up and Go (TUG)',
                   value:
                       '${session.tug!.totalSeconds.toStringAsFixed(1)} วินาที',
-                  detail: session.tug!.riskStatus == AssessmentStatus.risk
-                      ? 'มากกว่าเกณฑ์ ${AssessmentConfig.tugRiskThresholdSeconds.toStringAsFixed(1)} วินาที'
-                      : 'ไม่เกินเกณฑ์ ${AssessmentConfig.tugRiskThresholdSeconds.toStringAsFixed(1)} วินาที',
+                  detail:
+                      '${session.tug!.riskStatus == AssessmentStatus.risk ? 'มากกว่า' : 'ไม่เกิน'}เกณฑ์ '
+                      '${AssessmentConfig.tugRiskThresholdSeconds.toStringAsFixed(1)} วินาที'
+                      '${session.tug!.measurementMode == TugMeasurementMode.accelerometerOnly ? ' · ไม่ได้ยืนยันช่วงหมุนด้วย Gyroscope' : ''}'
+                      '${session.tug!.measurementMode == TugMeasurementMode.legacyUnspecified ? ' · ผลเดิมไม่ระบุชนิดเซนเซอร์' : ''}',
                 ),
                 const SizedBox(height: 14),
                 if (session.tug!.standDuration != null)
@@ -92,6 +99,14 @@ class HistoryDetailScreen extends ConsumerWidget {
                 detail:
                     SessionSummary.status(session) == AssessmentStatus.normal
                     ? 'ผลนี้เป็นการคัดกรองเบื้องต้น'
+                    : session.tug?.measurementMode ==
+                              TugMeasurementMode.accelerometerOnly &&
+                          session.tug?.riskStatus != AssessmentStatus.risk &&
+                          session.functionalReach?.status !=
+                              AssessmentStatus.warning &&
+                          (fullerton == null ||
+                              fullerton.protocolVariant.isStandard)
+                    ? 'ผล TUG นี้วัดด้วย Accelerometer-only และไม่ยืนยันช่วงหมุน จึงควรเทียบกับผู้จับเวลาจริง'
                     : fullerton != null &&
                           !fullerton.protocolVariant.isStandard &&
                           session.functionalReach?.status !=
